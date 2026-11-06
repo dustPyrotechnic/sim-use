@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Tests](https://github.com/lycorp-jp/sim-use/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/lycorp-jp/sim-use/actions/workflows/tests.yml)
 
-Give AI agents the ability to observe and act on iOS Simulator and Android emulator / device screens.
+Give AI agents the ability to observe and act on iOS Simulator, Android emulator / device, and HarmonyOS NEXT device screens.
 
 **Observe** — turn any screen into a token-efficient outline an LLM can reason about:
 
@@ -33,7 +33,7 @@ $ sim-use tap @9
 
 Plan, code, **verify**, ship — teach this CLI to your agent and close the last gap in the agentic mobile development loop. Let agents verify what they built so you can focus on what matters.
 
-`sim-use` is a cross-platform CLI that drives Apple's Accessibility APIs, the iOS Simulator HID pipeline, and Android's AccessibilityService through a single command surface. It emits a compact, agent-friendly screen description (`ui`) and an alias-cached tap shortcut (`tap @N`) so an LLM loop can observe → act in a few hundred milliseconds per round trip.
+`sim-use` is a cross-platform CLI that drives Apple's Accessibility APIs, the iOS Simulator HID pipeline, Android's AccessibilityService, and HarmonyOS `hdc` + `uitest` through a single command surface. It emits a compact, agent-friendly screen description (`ui`) and an alias-cached tap shortcut (`tap @N`).
 
 
 - [The observe → act loop](#the-observe--act-loop)
@@ -42,6 +42,7 @@ Plan, code, **verify**, ship — teach this CLI to your agent and close the last
 - [Platforms](#platforms)
 - [Commands](#commands)
 - [Physical iOS devices](#physical-ios-devices)
+- [HarmonyOS NEXT devices](#harmonyos-next-devices)
 - [Architecture](#architecture)
 - [Viewer](#viewer)
 - [Contributing](#contributing)
@@ -79,7 +80,7 @@ them in the device's native portrait points instead.
 - **Nothing hidden.** sim-use walks the full accessibility tree including WebViews, system overlays, and embedded content — no elements are silently skipped. When the frontmost app exposes an empty tree because a remote process owns the visible UI (a system document picker, for example), `ui` automatically retries with cross-process discovery and flags the recovered, flat hierarchy via the `advisory` envelope key.
 - **AI-native.** Designed from day one for agent loops, not human testers. Alias-cached taps (`@N`), structured `--json` envelopes with actionable `hint` fields on errors, and a bundled agent skill (`sim-use init --client claude`) that teaches your AI client the full command surface.
 - **Fast.** A per-device background daemon amortises init cost across calls. After the first command, each observe-act round trip completes in ~300 ms.
-- **Cross-platform.** One command surface drives both iOS Simulator and Android emulator/device. Same verbs, same flags, same `--json` shape — write one agent loop that works on both.
+- **Cross-platform.** A shared command surface and `--json` envelope drive iOS, Android and HarmonyOS. Available verbs and options depend on the target; see the platform sections.
 
 
 ## Install
@@ -182,8 +183,8 @@ Background: [issue #143](https://github.com/lycorp-jp/sim-use/issues/143),
 
 ### Linux (Android only)
 
-The Android backend also builds on Linux with a Swift 6 toolchain — iOS
-verbs, video capture, the Viewer and `init` are macOS-only. See [docs/ai/008-linux-android-build/linux-guide.md](docs/ai/008-linux-android-build/linux-guide.md) for what is available, how to
+The Android backend also builds on Linux with a Swift 6 toolchain — iOS,
+HarmonyOS, video capture, the Viewer and `init` are macOS-only. See [docs/ai/008-linux-android-build/linux-guide.md](docs/ai/008-linux-android-build/linux-guide.md) for what is available, how to
 build and install, and reaching devices from WSL.
 
 ```bash
@@ -205,11 +206,12 @@ sim-use init --uninstall --client claude
 
 ## Platforms
 
-sim-use drives both **iOS Simulators** and **Android devices / emulators** through the same command surface. The device ID shape decides which backend handles the call:
+sim-use selects the backend from the device identifier and connected Harmony targets:
 
   * `1A2B3C4D-...` (UUID) → iOS Simulator
   * `emulator-5554` / `R5CT1ABCD12` / `192.168.1.5:5555` → Android device
   * `00008130-...` (8-16 hex) / 40-hex → physical iPhone/iPad (restricted verb set)
+  * An Android-shaped serial listed by `hdc list targets` → HarmonyOS (checked before Android)
 
 For Android, run `sim-use android init --device <serial>` once to install the bridge APK. See `AGENTS.md` for Android toolchain setup. When `ADB_SERVER_SOCKET` points at an adb server on another machine (`tcp:<host>:<port>`), sim-use reaches the bridge on that host, since that is where `adb forward` listens; `SIM_USE_BRIDGE_HOST` overrides the host.
 
@@ -218,11 +220,12 @@ For Android, run `sim-use android init --device <serial>` once to install the br
 
 ## Commands
 
-All device-scoped commands accept `--device <ID>` (optional when only one simulator is booted). Three command layers:
+All device-scoped commands accept `--device <ID>`. Without it, `SIM_USE_DEVICE` / `SIM_USE_UDID`, then the single live non-Harmony daemon, then the single booted iOS simulator are considered. Harmony always needs an explicit flag or environment selection. Command layers:
 
   * **Top-level** — cross-platform verbs: `ui`, `tap`, `long-press`, `swipe`, `touch`, `multi-touch`, `type`, `paste`, `button`, `gesture`, `keyboard-state`, `screenshot`, `record-video`, `stream-video`, `app-state`. Same flags on iOS and Android; physical iOS devices route through `ui`, `tap` and `screenshot` only (the rest reject with the reason — see the [capability matrix](#physical-ios-devices)).
   * **`sim-use ios <verb>`** — iOS-Simulator-only: `key`, `key-combo`, `key-sequence`, `batch`, `rotate`, `fold`.
   * **`sim-use android <verb>`** — Android-only: `init`, `devices`, `ping`, `scroll`.
+  * **`sim-use harmony <verb>`** — Harmony-only namespace; explicitly selects this backend. The first-phase verbs also have top-level routes, including `scroll`.
   * **`sim-use ios-device <verb>`** — physical-iOS-only: `devices`, `ui`, `screenshot`, `tap` (experimental). Peer of `ios`/`android`; also accepts ECIDs and the hierarchy tuning flags the top level doesn't carry.
 
 Run `sim-use --help` or `sim-use <command> --help` for the full flag set.
@@ -521,7 +524,7 @@ sim-use app-state --bundle-id com.example.app --device $UDID  # running | not_ru
 sim-use app-state --reset --device $UDID                      # re-baseline crash detection
 ```
 
-While the daemon drives a device, it watches for the target process disappearing between commands and surfaces a banner on the next `ui` call. The signal is process liveness (not foreground identity), so backgrounding for a permission dialog or share sheet never false-fires. On Android, `ui` also detects the AOSP system crash dialog directly from the accessibility tree. Call `app-state --reset` after an intentional relaunch; `SIM_USE_NO_CRASH_DETECT=1` disables detection entirely.
+On iOS simulators and Android, the daemon watches for app processes disappearing between commands and surfaces a banner on the next `ui` call. The signal is process liveness, not foreground identity. On Android, `ui` also detects the AOSP system crash dialog directly from the accessibility tree. Call `app-state --reset` after an intentional relaunch; `SIM_USE_NO_CRASH_DETECT=1` disables detection entirely. Harmony phase 1 provides explicit `app-state` process queries, not automatic crash monitoring.
 
 ### Daemon
 
@@ -537,6 +540,109 @@ SIM_USE_NO_DAEMON=1 sim-use ui --device $UDID
 ```
 
 Daemons self-exit after 600 s of idle and log to `/tmp/sim-use-<uid>/<UDID>.log`. Streaming commands (`screenshot`, `record-video`, `stream-video`) always run in-process regardless.
+
+Harmony daemons carry a PID-bound platform sidecar and never participate in
+implicit device selection. Their connection identity includes the hdc server
+address (`OHOS_HDC_SERVER_PORT`, or its default). With one Android daemon and
+one Harmony daemon, an unqualified command still selects Android.
+
+## HarmonyOS NEXT devices
+
+The macOS build drives connected HarmonyOS NEXT phones through `hdc` and the
+device's built-in `uitest`; no HAP or helper app is installed. Put `hdc` on
+`PATH`, set `SIM_USE_HDC` to its executable, or use the DevEco installation.
+Select a serial explicitly with `--device` or `SIM_USE_DEVICE`. The
+`harmony` namespace forces this backend even if the serial resembles adb.
+Top-level membership discovery has a 3-second deadline. A failed or timed-out
+hdc probe emits one stderr warning per invocation, then preserves Android
+identifier-shape routing; it does not retry the failed probe in that invocation
+or cache the failure as a membership result. JSON stdout remains unchanged.
+Missing hdc leaves Android routing unchanged. A successful empty target list
+cannot identify a disconnected Harmony serial. If top-level adb reports that
+the device was not found while hdc is installed, the error hint puts
+`hdc list targets` and `sim-use harmony <verb>` before the original adb/daemon
+advice. Use the explicit namespace when the target platform is known.
+
+`harmony devices` lists connected targets only; there is no `--online` flag.
+
+```bash
+sim-use harmony devices --json
+sim-use ui --device <serial>
+sim-use tap @1 --device <serial>              # use an alias from the current UI
+sim-use tap --label "搜索" --device <serial>
+sim-use scroll --direction down --duration 0.4 --device <serial>
+sim-use type '你好abc123' --device <serial>
+sim-use button back --device <serial>
+sim-use screenshot --output shot.png --device <serial>
+sim-use keyboard-state --device <serial>
+```
+
+Supported in phase 1: `devices`, `describe-ui` / `ui`, `tap` (coordinates,
+aliases and selectors), `long-press`, `swipe`, `scroll`, `type`, `button`
+(`home`, `back`, `power`), `screenshot`, `app-state`, and `keyboard-state`.
+Device rows and UI descriptions identify the platform as `"harmony"`;
+device rows have `kind: "physical"`, and outline coordinates are pixels. Re-read `ui`
+after navigation or a keyboard change before using an alias. Check `harmony <verb> --help` for
+available flags; iOS-specific options do not imply Harmony support.
+
+Default Harmony outlines exclude non-keyboard elements whose tap centers lie
+inside a keyboard panel. Known transparent wrappers are skipped in favor of
+painted descendants, including image backgrounds and separate popup panels.
+Missing paint attributes are treated conservatively; if an input-method subtree
+has no usable painted panel, its bounded-panel fallback remains.
+Keyboard controls and partially covered targets with usable centers remain;
+list counts and aliases describe only retained entries. Full-screen window
+wrappers are not used as keyboard height. Without valid panel bounds, no
+keyboard occlusion is inferred. `ui --include-offscreen` (also in the Harmony namespace)
+keeps the unfiltered diagnostic view, including covered elements.
+
+Cached `@N` and `#N` targets read one fresh layout before input, including
+`long-press` and `type --target`, **only to check keyboard occlusion and screen
+bounds**. This does not prove that the target is still in its original place.
+A covered App target or a failed dump stops without input; a matching current
+keyboard control remains usable. Zero-size cached targets also reject input.
+These checks do not refresh cached coordinates or renumber aliases.
+
+This is not general stale-alias or visibility validation: an old keyboard alias
+after the keyboard closes, a page change, or a `visible=false` diagnostic alias
+can still send input at its cached point when it is on screen and not covered.
+**Always re-run default `ui` after page changes** and refresh after keyboard
+changes. The screen can still change between validation and input.
+Selectors and cached aliases reject actual input points outside the screen,
+including negative centers: scroll the target into view, then run `describe-ui`
+again. Partially visible elements stay in the outline even if their center is
+outside, and `--include-offscreen` still includes zero-size diagnostics.
+Explicit `--x/--y` and `--point` coordinates bypass these layout checks.
+A selector miss suggests refreshing `describe-ui` and checking the selector,
+while actual transport failures retain hdc connection advice.
+
+Harmony uses the native fixed-duration `longClick`; custom long-press
+durations, `type --clear`, and `swipe --delta` are rejected. Both `scroll`
+and `harmony scroll` default to `--direction down` and use **seconds** for
+`--duration` (default `0.4`), like `swipe`. They share the same success output.
+Duration is converted to the native velocity range; out-of-range requests
+fail rather than clamp.
+
+**Text replaces the device pasteboard.** `type` uses `uitest text` for a
+focused field or `inputText` for a coordinate/selector target and reports a
+pasteboard advisory. It cannot restore the previous pasteboard. Verify the
+field after input; do not enter secrets as a test.
+
+`keyboard-state` prints `soft` or `hidden` (JSON: `visible`) only when the
+WindowManagerService probe is valid. Missing or malformed keyboard rows,
+transport errors and timeouts are failures, not `hidden`. The probe uses
+`SCBKeyboardPanel` visibility, not a focused-node heuristic.
+
+System dialogs are flagged in the outline and never dismissed automatically.
+Do not select USB-connection options while automating a connected phone:
+they can sever the transport. Use Back only when authorized; stop on a
+locked device instead of entering its password.
+
+No Harmony support for Linux, video capture/streaming, multi-touch, gesture
+presets or `paste` in phase 1. Emulator behavior, foldables, landscape and
+third-party keyboards are not validated. The initial device evidence is
+ALN-AL00 on HarmonyOS 6.1.0.135, in system UI and Baidu.
+
 
 
 ## Physical iOS devices
@@ -622,7 +728,7 @@ This channel deliberately differs from the simulator backend:
 
 ## Architecture
 
-sim-use drives iOS Simulators through the lower-level XCFrameworks of Facebook's [idb](https://github.com/facebook/idb) (statically linked), Apple's Accessibility APIs, and the simulator HID pipeline. Android devices are driven through an on-device bridge APK that exposes the AccessibilityService tree and input injection over HTTP, tunnelled via `adb forward`. Physical iOS devices go through a third path: idb's `FBDeviceControl` opens a lockdown service connection, over which sim-use speaks Apple's DTX message protocol to the accessibility audit daemon (screen capture instead shells out to Xcode's `devicectl`). Everything ships as a single binary, and every surface — simulator, Android and physical iOS — supports `--json` with the shared `{ok, data}` envelope.
+sim-use drives iOS Simulators through the lower-level XCFrameworks of Facebook's [idb](https://github.com/facebook/idb) (statically linked), Apple's Accessibility APIs, and the simulator HID pipeline. Android devices are driven through an on-device bridge APK that exposes the AccessibilityService tree and input injection over HTTP, tunnelled via `adb forward`. Physical iOS devices use idb's `FBDeviceControl` to open a lockdown service connection, over which sim-use speaks Apple's DTX message protocol to the accessibility audit daemon (screen capture instead shells out to Xcode's `devicectl`). HarmonyOS devices use the host's `hdc` and the device's native `uitest`, `hidumper` and screenshot services, without installing an agent. The macOS binary includes all four surfaces with the shared `{ok, data}` JSON envelope; the Linux binary remains Android-only.
 
 
 ## Viewer

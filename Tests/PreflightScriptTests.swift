@@ -6,7 +6,7 @@ import Testing
 struct PreflightScriptTests {
     @Test("device listing does not receive device-scoped options")
     func deviceListingDoesNotReceiveDeviceScopedOptions() async throws {
-        let fixture = try makeFakeSimUse(versionStamp: "0.16.0")
+        let fixture = try makeFakeSimUse(versionStamp: "0.17.0")
         defer { try? FileManager.default.removeItem(at: fixture.tempRoot) }
 
         let result = try await runPreflight(fakeSimUse: fixture.executable)
@@ -21,25 +21,24 @@ struct PreflightScriptTests {
         #expect(log.contains("ui --json --device target-device"))
     }
 
-    // The floor is 0.16.0: the skill tells agents to use `ios fold` and
-    // `ios rotate`, and relies on the secondary-display refusals and the
-    // `display` tag that release introduces (docs/ai/010-display-routing);
-    // a 0.15.0 CLI has no such verbs and would tap the dark main display of
-    // an unfolded iPhone Duo with a false success. Restored verified paste
-    // also ships in the unreleased 0.16.0; it needs no higher floor.
+    // Harmony commands first ship after 0.16.0. Release builds below
+    // 0.17.0 must fail before preflight sends a device-scoped command.
     @Test("version compatibility follows release normalization", arguments: [
-        (stamp: "0.16.0", versionExitCode: 0, expectedPass: true),
         (stamp: "0.17.0", versionExitCode: 0, expectedPass: true),
-        (stamp: "v0.16.0", versionExitCode: 0, expectedPass: true),
-        (stamp: "v0.16.0-3-gabc1234-dirty", versionExitCode: 0, expectedPass: true),
+        (stamp: "0.18.0", versionExitCode: 0, expectedPass: true),
+        (stamp: "v0.17.0", versionExitCode: 0, expectedPass: true),
+        (stamp: "v0.17.0-3-gabc1234-dirty", versionExitCode: 0, expectedPass: true),
         (stamp: "v0.15.0-3-gabc1234-dirty", versionExitCode: 0, expectedPass: true),
         (stamp: "dev", versionExitCode: 0, expectedPass: true),
+        (stamp: "0.16.0", versionExitCode: 0, expectedPass: false),
+        (stamp: "v0.16.0", versionExitCode: 0, expectedPass: false),
+        (stamp: "0.16.9", versionExitCode: 0, expectedPass: false),
         (stamp: "0.15.0", versionExitCode: 0, expectedPass: false),
         (stamp: "v0.15.0", versionExitCode: 0, expectedPass: false),
         (stamp: "0.15.9", versionExitCode: 0, expectedPass: false),
         (stamp: "0.14.0", versionExitCode: 0, expectedPass: false),
         (stamp: "v0.14.0-5-gabc1234", versionExitCode: 0, expectedPass: true),
-        (stamp: "0.16.0", versionExitCode: 7, expectedPass: false),
+        (stamp: "0.17.0", versionExitCode: 7, expectedPass: false),
     ])
     func versionCompatibility(
         _ testCase: (stamp: String, versionExitCode: Int, expectedPass: Bool)
@@ -74,7 +73,7 @@ struct PreflightScriptTests {
         #"{"ok":true,"advisory":{"kind":"remote_content_recovery"},"data":{"platform":"ios","entries":[{"role":"Button","label":"Browse"},{"role":"Button","label":"Cancel"}]}}"#,
     ])
     func remoteContentRecoveryWarns(uiResponse: String) async throws {
-        let fixture = try makeFakeSimUse(versionStamp: "0.16.0", uiResponse: uiResponse)
+        let fixture = try makeFakeSimUse(versionStamp: "0.17.0", uiResponse: uiResponse)
         defer { try? FileManager.default.removeItem(at: fixture.tempRoot) }
 
         let result = try await runPreflight(fakeSimUse: fixture.executable)
@@ -101,9 +100,10 @@ struct PreflightScriptTests {
         (response: #"{"ok":true,"data":{"platform":"ios","entries":[],"outline":"App: Test"}}"#, expectsAccessibilityHint: true),
         (response: #"{"ok":true,"data":{"platform":"android","entries":[],"outline":"App: Test"}}"#, expectsAccessibilityHint: false),
         (response: #"{"ok":true,"data":{"platform":"android","kind":"physical","entries":[],"outline":"App: Test"}}"#, expectsAccessibilityHint: false),
+        (response: #"{"ok":true,"data":{"platform":"harmony","entries":[],"outline":"App: Test"}}"#, expectsAccessibilityHint: false),
     ])
     func emptyOutlineWarns(_ testCase: (response: String, expectsAccessibilityHint: Bool)) async throws {
-        let fixture = try makeFakeSimUse(versionStamp: "0.16.0", uiResponse: testCase.response)
+        let fixture = try makeFakeSimUse(versionStamp: "0.17.0", uiResponse: testCase.response)
         defer { try? FileManager.default.removeItem(at: fixture.tempRoot) }
 
         let result = try await runPreflight(fakeSimUse: fixture.executable)
@@ -126,9 +126,10 @@ struct PreflightScriptTests {
         #"{"ok":true,"advisory":{"kind":"orientation_calibration_fallback"},"data":{"platform":"ios","entries":[{"role":"Button","label":"OK"}]}}"#,
         #"{"ok":true,"advisory":{"kind":"full_screen_tap_target"},"data":{"platform":"android","entries":[{"role":"Button","label":"OK"}]}}"#,
         #"{"ok":true,"data":{"platform":"ios","kind":"physical","entries":[],"lists":[],"outline":"Button: Close"}}"#,
+        #"{"ok":true,"data":{"platform":"harmony","entries":[{"role":"TextField","label":"搜索"}]}}"#,
     ])
     func successfulReadWithoutContentProblemDoesNotWarn(uiResponse: String) async throws {
-        let fixture = try makeFakeSimUse(versionStamp: "0.16.0", uiResponse: uiResponse)
+        let fixture = try makeFakeSimUse(versionStamp: "0.17.0", uiResponse: uiResponse)
         defer { try? FileManager.default.removeItem(at: fixture.tempRoot) }
 
         let result = try await runPreflight(fakeSimUse: fixture.executable)
@@ -146,7 +147,7 @@ struct PreflightScriptTests {
     ])
     func unsuccessfulReadStillFails(_ testCase: (response: String, exitCode: Int)) async throws {
         let fixture = try makeFakeSimUse(
-            versionStamp: "0.16.0",
+            versionStamp: "0.17.0",
             uiResponse: testCase.response,
             uiExitCode: testCase.exitCode
         )
@@ -163,6 +164,38 @@ struct PreflightScriptTests {
         #expect(log == "--version\ndevices --json\nui --json --device target-device\ndaemon stop --all\nui --json --device target-device\n")
     }
 
+    @Test("Harmony preflight requires explicit device selection", arguments: [
+        (explicit: false, withAndroid: false, expectedPass: false),
+        (explicit: false, withAndroid: true, expectedPass: true),
+        (explicit: true, withAndroid: false, expectedPass: true),
+    ])
+    func harmonySelection(
+        _ scenario: (explicit: Bool, withAndroid: Bool, expectedPass: Bool)
+    ) async throws {
+        let harmony = #"{"deviceId":"target-device","name":"Harmony phone","platform":"harmony","state":"device"}"#
+        let android = #"{"deviceId":"target-device","name":"Android phone","platform":"android","state":"device"}"#
+        // A different Harmony serial in the mixed case proves the Android
+        // candidate wins, rather than the first connected device.
+        let harmonyRow = scenario.withAndroid
+            ? harmony.replacingOccurrences(of: "target-device", with: "harmony-device")
+            : harmony
+        let rows = scenario.withAndroid ? "\(harmonyRow),\(android)" : harmonyRow
+        let fixture = try makeFakeSimUse(
+            versionStamp: "0.17.0",
+            devicesResponse: #"{"ok":true,"data":{"devices":["# + rows + "]}}"
+        )
+        defer { try? FileManager.default.removeItem(at: fixture.tempRoot) }
+        let deviceOption = scenario.explicit ? "--device target-device" : ""
+        let result = try await CommandRunner.run(
+            "python3 skills/sim-use/scripts/preflight.py \(deviceOption) --sim-use-bin \(fixture.executable.path)",
+            allowFailure: true
+        )
+        #expect(result.exitCode == (scenario.expectedPass ? 0 : 1))
+        let log = try String(contentsOf: fixture.logFile, encoding: .utf8)
+        #expect(log.contains("ui --json --device target-device") == scenario.expectedPass)
+        #expect(!log.contains("--device harmony-device"))
+    }
+
     private func runPreflight(fakeSimUse: URL) async throws -> (output: String, exitCode: Int32) {
         try await CommandRunner.run(
             "python3 skills/sim-use/scripts/preflight.py --device target-device --sim-use-bin \(fakeSimUse.path)",
@@ -174,7 +207,8 @@ struct PreflightScriptTests {
         versionStamp: String,
         versionExitCode: Int = 0,
         uiResponse: String = #"{"ok":true,"data":{"outline":"App: Test"}}"#,
-        uiExitCode: Int = 0
+        uiExitCode: Int = 0,
+        devicesResponse: String = #"{"ok":true,"data":{"devices":[{"deviceId":"target-device","name":"Test iPhone","platform":"ios","state":"Booted"}]}}"#
     ) throws -> (tempRoot: URL, executable: URL, logFile: URL) {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -187,7 +221,8 @@ struct PreflightScriptTests {
             versionStamp: versionStamp,
             versionExitCode: versionExitCode,
             uiResponse: uiResponse,
-            uiExitCode: uiExitCode
+            uiExitCode: uiExitCode,
+            devicesResponse: devicesResponse
         ).write(to: executable, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
 
@@ -199,7 +234,8 @@ struct PreflightScriptTests {
         versionStamp: String,
         versionExitCode: Int,
         uiResponse: String,
-        uiExitCode: Int
+        uiExitCode: Int,
+        devicesResponse: String
     ) -> String {
         """
         #!/bin/bash
@@ -215,7 +251,7 @@ struct PreflightScriptTests {
             echo "devices must not receive --device" >&2
             exit 2
           fi
-          echo '{"ok":true,"data":{"devices":[{"deviceId":"target-device","name":"Test iPhone","platform":"ios","state":"Booted"}]}}'
+          echo '\(devicesResponse)'
           exit 0
         fi
 

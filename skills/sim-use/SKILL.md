@@ -1,6 +1,6 @@
 ---
 name: sim-use
-description: Drive iOS Simulator, Android emulator/device, and physical iPhone/iPad screens for AI agents. Use when asked to automate a simulator or emulator, drive a real iOS device, tap/swipe/type on a device, describe UI, take a screenshot, or interact with a mobile app.
+description: Drive iOS Simulator, Android emulator/device, HarmonyOS NEXT phones, and physical iPhone/iPad screens for AI agents. Use when asked to automate a simulator or emulator, drive a real iOS or HarmonyOS device, tap/swipe/type on a device, describe UI, take a screenshot, or interact with a mobile app.
 ---
 
 ## 0. Preflight
@@ -19,7 +19,7 @@ This verifies sim-use is installed and compatible with the skill, the device is 
 
 A `WARN  UI content` line still passes preflight: the read works, but the outline can miss app controls. See the *Pitfalls* index.
 
-`--device` is optional when only one simulator is booted or one daemon is running. For Android, run `sim-use android init --device <serial>` once to install the bridge APK. Attached physical iPhones/iPads appear in `sim-use devices` with kind `physical` and route through the top-level verbs too — but only `ui`, selector-based `tap` and `screenshot`; every other verb rejects on that target. See *Physical iOS devices* below before driving one. A Linux build of sim-use drives Android only: `sim-use ios …`, `record-video` / `stream-video`, `viewer` and `init` are absent there, every verb needs `--device <serial>`, and `sim-use devices` lists Android devices only.
+The skill requires sim-use 0.17.0 or a development build with these commands. `--device` is optional when only one simulator is booted or one non-Harmony daemon is running. For Android, run `sim-use android init --device <serial>` once to install the bridge APK. Physical iPhones/iPads support only `ui`, selector-based `tap` and `screenshot`; see *Physical iOS devices* below. Harmony always requires an explicit serial or `SIM_USE_DEVICE`; see *HarmonyOS NEXT* before using it. Linux remains Android-only: no Harmony/iOS verbs, video, Viewer or `init`, and every verb needs `--device <serial>`.
 
 ## 1. The observe-act loop
 
@@ -33,7 +33,7 @@ sim-use ui --device <UDID>
 
 Read the outline. Each element has an `@N` alias and optionally a `#<id>` identifier. List cells carry `#N` (dominant list) or `#N@M` (scoped).
 
-Frames in the JSON output (`--json`: `entries[].frame`, `screen`) are in platform-native units — iOS **points**, Android **pixels**. Key off the envelope's `platform` field before doing math on coordinates across platforms. Always pair `--json` with `--no-raw` — see *Keeping output small* below.
+Frames in the JSON output (`--json`: `entries[].frame`, `screen`) use iOS **points**, Android and Harmony **pixels**. Key off `platform` before doing coordinate math across platforms. For UI reads, pair `--json` with `--no-raw` — see *Keeping output small* below.
 
 ### Act
 
@@ -67,7 +67,7 @@ Every byte of command output you read costs context. Defaults that keep the loop
 - When you do use `--json`, add `--no-raw`. `data.raw` is the raw accessibility tree — typically the bulk of the envelope's bytes, and useful only for debugging sim-use itself.
 - One `ui` per action: the Verify read of step N is the Observe read of step N+1. Don't run a second `ui` in between.
 - Verify with the text outline, not a screenshot. Reading a screenshot costs several times more than a typical outline; take one only when the check is genuinely visual (colors, images, layout).
-- On iOS, to wait out a transition, prefer `tap --label 'X' --wait-timeout 3` (polls for the element) over re-running `ui` in a loop. Android `tap` has no `--wait-timeout`; use `sleep` between commands instead.
+- On iOS, to wait out a transition, prefer `tap --label 'X' --wait-timeout 3` (polls for the element) over re-running `ui` in a loop. Android and Harmony `tap` have no `--wait-timeout`; use `sleep` between commands instead.
 - For a known multi-step sequence on iOS, use `sim-use ios batch` (see `references/batch-reference.md`) — one invocation, one output.
 
 ### Common moves
@@ -97,6 +97,74 @@ For multiline or shell-sensitive text, use `printf '%s' "$TEXT" | sim-use paste 
 Shared clipboard sync can also overwrite the Mac and other devices. Keep one clipboard writer active. sim-use serializes its own paste operations and checks for unexpected readback, but cannot prevent external writes. Never print unrelated clipboard data or restore an old backup over newer external content.
 
 Batch paste supports default, replacement, files and explicit menu targets; `paste --stdin` is not a batch step because stdin belongs to the batch. A failed batch is not automatically replayed after a transient boot-readiness error. Inspect the UI and completed steps before retrying, including with `--continue-on-error`.
+
+### HarmonyOS NEXT (macOS host)
+
+Use `hdc` on `PATH` or set `SIM_USE_HDC` to its executable; no on-device
+helper or app install is needed. Always pass `--device <serial>` or set
+`SIM_USE_DEVICE`. Harmony daemons are excluded from automatic device
+selection. `sim-use harmony <verb>` forces Harmony; top-level commands
+recognize connected hdc serials before adb-shaped identifiers.
+A failed or timed-out hdc membership probe emits one stderr warning and keeps
+Android identifier-shape routing; its deadline is 3 seconds, and the failed
+probe is not repeated in that invocation. Missing hdc leaves Android routing
+unchanged. A target absent from `hdc list targets` cannot be identified as
+Harmony: if a top-level command reports an adb device-not-found error, its
+Harmony connection/namespace advice comes before the original adb/daemon hint.
+Check the connection or use `sim-use harmony <verb>` when the platform is known.
+
+Phase 1 supports `devices`, `ui` / `describe-ui`, `tap` (coordinates, `@N`,
+selectors), `long-press`, `swipe`, `scroll`, `type`, `button` (`home`, `back`,
+`power`), `screenshot`, `app-state`, and `keyboard-state`. Inspect
+`sim-use harmony <verb> --help` for supported options. Use `scroll` or
+`swipe`, not gesture presets. No `paste`, multi-touch, video or Linux
+Harmony support; do not infer emulator, foldable or landscape compatibility.
+`harmony devices` lists connected targets only; do not pass `--online`.
+Both scroll entrypoints default to down and accept `--duration` in seconds
+(default `0.4`), like swipe. Example:
+`sim-use scroll --direction down --duration 0.4 --device <serial>`.
+Harmony rejects `swipe --delta`; omit it rather than assuming it changes
+the gesture.
+
+Default `ui` hides non-keyboard targets whose tap centers are covered by a
+painted input-method panel. Known transparent wrappers are skipped; image
+backgrounds and painted popups cover their own frames. Missing paint metadata
+is not proof of transparency, and a subtree with no painted panel keeps its
+conservative bounded-panel fallback. Keyboard controls and partially covered
+targets with usable centers remain; list aliases count only retained cells.
+Without valid panel bounds, do not assume the outline detects keyboard occlusion.
+`ui --include-offscreen` keeps covered elements for diagnostics, not safe input.
+Cached `@N`/`#N` input (also long-press and `type --target`) reads one current
+layout **only to check keyboard occlusion and screen bounds**. It does not
+prove the target is still in its original place. Covered App targets, unusable
+cached sizes and dump failures stop without input; matching current keyboard
+controls still work. Validation keeps the old coordinates and alias numbering.
+This is not general stale-alias or visibility validation: an old keyboard alias
+after dismissal, a changed page, or a `visible=false` diagnostic alias can still
+send input at an uncovered on-screen cached point. **Always refresh default `ui`
+after page changes**, and refresh after keyboard changes. The screen can still
+change between validation and input.
+If a selector or alias resolves outside the screen, including negative centers,
+scroll then refresh `ui`; partially visible elements can have offscreen centers.
+Zero-size entries remain in `--include-offscreen` diagnostics, not usable input.
+Explicit `--x/--y` and `--point` bypass these checks; do not use them to evade a refusal.
+On a selector miss, refresh `describe-ui` and check the selector; reserve hdc
+connection troubleshooting for transport errors.
+
+`type '你好' --device <serial>` works with CJK in the focused field.
+**It replaces the device pasteboard and cannot restore it**; successful
+input reports an advisory. Targeted input uses `uitest inputText`.
+Verify the field after typing, and do not type secrets as test data.
+
+`keyboard-state` returns `soft` or `hidden` (JSON `visible`) on a valid
+WindowManagerService probe. A missing/malformed `SCBKeyboardPanel` row or
+transport failure is an error, never evidence that the keyboard is hidden.
+
+System-dialog warnings require inspection before input. Never select a
+USB-connection-mode option during automation: it can disconnect hdc.
+Use `button back` to dismiss only when authorized. Stop at a lock screen;
+do not enter the password. Re-read `ui` after navigation before using `@N`.
+
 
 ### Physical iOS devices (experimental)
 
@@ -157,7 +225,7 @@ Quick symptom index — see `references/pitfalls.md` for detailed recipes.
 
 See `references/crash-awareness.md` for the full protocol. Summary:
 
-sim-use watches for the target process disappearing between commands. When it detects a crash:
+On iOS simulators and Android, sim-use watches for app processes disappearing between commands. Harmony phase 1 has explicit `app-state` queries only. When automatic detection reports a disappearance:
 
 ```
 ================ PROCESS DISAPPEARED ================

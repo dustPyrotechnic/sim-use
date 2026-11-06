@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Notarized Homebrew packages retain their original Developer ID signature after installation.
+Control HarmonyOS NEXT phones from macOS through `hdc` and the built-in `uitest`, with explicit device selection, keyboard-aware target checks and no helper app install. Harmony text input replaces the device pasteboard; the bundled skill now requires sim-use 0.17.0. Notarized Homebrew packages retain their original Developer ID signature after installation.
+
+### Added
+
+- HarmonyOS: list devices, inspect UI, tap by coordinates or selectors, long-press, swipe, scroll, type Unicode, press home/back/power, capture screenshots, and inspect app or keyboard state. Use top-level verbs or `sim-use harmony`; video, multi-touch, `paste` and Linux Harmony support are not included.
+- HarmonyOS device listings share the same `data.devices` array in `--json` from the top-level and `harmony` namespaces, including empty lists.
+- HarmonyOS UI outlines retain visible targets through transparent keyboard wrappers. Cached aliases check the current keyboard without renumbering; offscreen and zero-size targets reject input. This is not general stale-alias validation: refresh `ui` after page changes. Keyboard controls remain usable, `--include-offscreen` preserves diagnostics, and explicit coordinates bypass these layout checks.
+- HarmonyOS `app-state` reports system and third-party main processes, including names containing spaces. Unrecognized process tables fail explicitly rather than reporting apps as stopped.
+- HarmonyOS membership takes precedence over adb-shaped serials; explicit selection is required and Harmony daemons never become implicit targets. Optional hdc discovery has a 3-second deadline; failures warn once and preserve Android routing. When hdc is installed, top-level missing-device errors put Harmony connection advice before the original adb/daemon guidance.
+- HarmonyOS UI outlines flag system dialogs without dismissing them. Keyboard probe failures return errors instead of incorrectly reporting that the keyboard is hidden.
 
 ### Fixed
 

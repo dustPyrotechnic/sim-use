@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 
-MINIMUM_SIM_USE_VERSION = (0, 16, 0)
+MINIMUM_SIM_USE_VERSION = (0, 17, 0)
 
 
 # ---------------------------------------------------------------------------
@@ -42,7 +42,7 @@ class Check:
 class Ctx:
     device: Optional[str] = None
     sim_use_bin: str = "sim-use"
-    platform: Optional[str] = None  # "ios" or "android", detected
+    platform: Optional[str] = None  # "ios", "android" or "harmony", detected
     content_warning: Optional[str] = None  # "remote_content_recovery" or "empty_outline"
     ui_is_ios_simulator: bool = False
     errors: list = field(default_factory=list)
@@ -130,7 +130,11 @@ def check_device_listed(ctx: Ctx) -> bool:
         return False
 
     if not ctx.device:
-        booted = [d for d in devices if d.get("state", "").lower() in ("booted", "device")]
+        booted = [
+            d for d in devices
+            if d.get("platform") != "harmony"
+            and d.get("state", "").lower() in ("booted", "device")
+        ]
         if len(booted) == 1:
             ctx.device = booted[0].get("deviceId") or booted[0].get("udid")
             ctx.platform = booted[0].get("platform")
@@ -235,7 +239,7 @@ def shared_checks() -> list[Check]:
             description="target device is listed and reachable",
             run=check_device_listed,
             on_fail="abort",
-            fix_hint="Boot a simulator, connect and unlock a physical iPhone/iPad, or connect an Android device, then retry.",
+            fix_hint="Boot a simulator or connect an unlocked device. Harmony requires --device <serial>.",
         ),
         Check(
             id="ui_responds",

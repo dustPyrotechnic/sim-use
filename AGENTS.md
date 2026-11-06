@@ -104,7 +104,7 @@ After any non-trivial change, at minimum:
 
 ## Module layout
 
-Five SwiftPM targets; dependency graph flows in one direction.
+The dependency graph flows in one direction; HarmonyBackend is macOS-only.
 
 | Target | Path | Depends on |
 |---|---|---|
@@ -112,7 +112,8 @@ Five SwiftPM targets; dependency graph flows in one direction.
 | `SimUseVideo` | `Sources/SimUseVideo/` | SimUseCore + AVFoundation/ImageIO |
 | `iOSSimBackend` | `Sources/iOSSimBackend/` | SimUseCore + SimUseVideo + FB* XCFrameworks + AVFoundation |
 | `AndroidBackend` | `Sources/AndroidBackend/` | SimUseCore + SimUseVideo + ArgumentParser |
-| `SimUse` (executable) | `Sources/SimUse/` | SimUseCore + SimUseVideo + iOSSimBackend + AndroidBackend + FB* |
+| `HarmonyBackend` (macOS only) | `Sources/HarmonyBackend/` | SimUseCore + ArgumentParser |
+| `SimUse` (executable) | `Sources/SimUse/` | SimUseCore + SimUseVideo + iOSSimBackend + AndroidBackend + HarmonyBackend + FB* |
 | `SimUseLinux` (executable, Linux only) | `Sources/SimUseLinux/` | SimUseCore + AndroidBackend |
 
 On Linux, `Package.swift` declares only `SimUseCore`, `AndroidBackend` (without its three video-capture files) and `SimUseLinux` — see `docs/ai/008-linux-android-build/linux-guide.md`. Linux-only shims live in `Sources/SimUseCore/LinuxCompat.swift`; `swift build` / `swift test` run there directly.
@@ -121,17 +122,19 @@ On Linux, `Package.swift` declares only `SimUseCore`, `AndroidBackend` (without 
 
 ### Verb dispatch
 
-A verb (tap, swipe, type, ...) reaches three surfaces:
+A verb (tap, swipe, type, ...) has these platform entrypoints:
 
-1. **Top-level** — `Sources/SimUse/Commands/<Verb>.swift`. Resolves the target via `PlatformRouter`, then forwards to the iOS or Android backend.
+1. **Top-level** — `Sources/SimUse/Commands/<Verb>.swift`. Resolves the target via `PlatformRouter`, then forwards to the iOS, Android or Harmony backend; unsupported Harmony capabilities fail explicitly.
 2. **`sim-use ios <verb>`** — `Sources/iOSSimBackend/Verbs/IOSSim<Verb>Command.swift`.
 3. **`sim-use android <verb>`** — `Sources/AndroidBackend/Verbs/Android<Verb>Command.swift`.
+4. **`sim-use harmony <verb>`** — `Sources/HarmonyBackend/Verbs/Harmony<Verb>Command.swift`; requires an explicit device or environment selection.
 
 Four verbs are iOS-only (`key`, `key-combo`, `key-sequence`, `batch`) — no top-level alias.
 
 ### Adding a new verb
 
 - **Cross-platform**: write `IOSSim<Verb>Command` + `Android<Verb>Command`, plus a top-level forwarder in `Sources/SimUse/Commands/<Verb>.swift`. Register in `IOSSimCommand.swift`, `AndroidCommand.swift`, and `main.swift`.
+- **Harmony-capable**: also add `Harmony<Verb>Command` in `Sources/HarmonyBackend/Verbs/`, register it in `HarmonyCommand.swift`, and handle `.harmony` in the top-level forwarder. Do not infer support from the Android implementation.
 - **iOS-only**: write `IOSSim<Verb>Command`, register in `IOSSimCommand` only. Use `HIDKeyCommandHelp.androidUnsupportedMessage` to reject Android UDIDs (see `IOSSimKeyCommand`).
 - **Shared flags**: `@OptionGroup var udid: UDIDOptions` + `@OptionGroup var json: JSONOutputOptions`.
 
