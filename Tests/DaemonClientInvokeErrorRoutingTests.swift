@@ -225,12 +225,12 @@ struct DaemonClientInvokeErrorRoutingTests {
         let tmp = try makeTempDirectory()
         defer { removeTempDirectory(tmp) }
         let udid = "TEST-PASTE-\(UUID().uuidString.prefix(8))"
-        let (paths, task) = try await startTestDaemon(udid: udid, baseDirectory: tmp)
-        defer { task.cancel() }
-        FakePasteState.executions = 0
-        FakePasteState.actions = []
-        FakePasteState.failDuringSend = failDuringSend
         try await withParser({ _ in FakePasteCompletionCommand() }) {
+            let (paths, task) = try await startTestDaemon(udid: udid, baseDirectory: tmp)
+            defer { task.cancel() }
+            FakePasteState.executions = 0
+            FakePasteState.actions = []
+            FakePasteState.failDuringSend = failDuringSend
             do {
                 _ = try await DaemonClient.invoke(
                     command: command, args: [], udid: udid,
@@ -246,11 +246,11 @@ struct DaemonClientInvokeErrorRoutingTests {
                 #expect(message.contains("Verify the field before retrying"))
                 #expect(!message.contains("No translation object"))
             }
+            #expect(FakePasteState.executions == 1)
+            #expect(FakePasteState.actions == ["Paste"])
+            await DaemonClient.stopDaemon(paths: paths, timeout: 2)
+            _ = try? await task.value
         }
-        #expect(FakePasteState.executions == 1)
-        #expect(FakePasteState.actions == ["Paste"])
-        await DaemonClient.stopDaemon(paths: paths, timeout: 2)
-        _ = try? await task.value
     }
 
     @Test("A later batch failure never replays a completed or ambiguous Paste", arguments: [false, true])
@@ -258,12 +258,12 @@ struct DaemonClientInvokeErrorRoutingTests {
         let tmp = try makeTempDirectory()
         defer { removeTempDirectory(tmp) }
         let udid = "TEST-BATCH-\(UUID().uuidString.prefix(8))"
-        let (paths, task) = try await startTestDaemon(udid: udid, baseDirectory: tmp)
-        defer { task.cancel() }
-        FakeBatchReplayState.executions = 0
-        FakeBatchReplayState.actions = []
-        FakeBatchReplayState.continueOnError = continueOnError
         try await withParser({ _ in FakeMultiStepBatchCommand() }) {
+            let (paths, task) = try await startTestDaemon(udid: udid, baseDirectory: tmp)
+            defer { task.cancel() }
+            FakeBatchReplayState.executions = 0
+            FakeBatchReplayState.actions = []
+            FakeBatchReplayState.continueOnError = continueOnError
             do {
                 _ = try await DaemonClient.invoke(
                     command: "batch", args: [], udid: udid,
@@ -283,11 +283,11 @@ struct DaemonClientInvokeErrorRoutingTests {
                     #expect(message.contains("Verify the field before retrying"))
                 }
             }
+            #expect(FakeBatchReplayState.executions == 1)
+            #expect(FakeBatchReplayState.actions == ["first Paste"])
+            await DaemonClient.stopDaemon(paths: paths, timeout: 2)
+            _ = try? await task.value
         }
-        #expect(FakeBatchReplayState.executions == 1)
-        #expect(FakeBatchReplayState.actions == ["first Paste"])
-        await DaemonClient.stopDaemon(paths: paths, timeout: 2)
-        _ = try? await task.value
     }
 
     @Test("Parsed iOS batches opt out of transient request replay")
@@ -331,13 +331,13 @@ struct DaemonClientInvokeErrorRoutingTests {
         defer { removeTempDirectory(tmp) }
 
         let udid = "TEST-REMOTE-\(UUID().uuidString.prefix(8))"
-        let (paths, task) = try await startTestDaemon(udid: udid, baseDirectory: tmp)
-        defer { task.cancel() }
-        let pidBefore = paths.readPidfile()
-
-        FakeCommandState.reset(failures: .max, message: "fixture: element not found")
-
         try await withParser({ _ in FakeFlakyCommand() }) {
+            let (paths, task) = try await startTestDaemon(udid: udid, baseDirectory: tmp)
+            defer { task.cancel() }
+            let pidBefore = paths.readPidfile()
+
+            FakeCommandState.reset(failures: .max, message: "fixture: element not found")
+
             do {
                 _ = try await DaemonClient.invoke(
                     command: "fake-flaky",
@@ -354,16 +354,16 @@ struct DaemonClientInvokeErrorRoutingTests {
                 #expect(message.contains("fixture: element not found"))
                 #expect(kind == .other)
             }
+
+            // The daemon answered; it is healthy. Its files must survive
+            // and the command must have executed exactly once.
+            #expect(FileManager.default.fileExists(atPath: paths.socketURL.path))
+            #expect(paths.readPidfile() == pidBefore)
+            #expect(FakeCommandState.executeCount == 1)
+
+            await DaemonClient.stopDaemon(paths: paths, timeout: 2.0)
+            _ = try? await task.value
         }
-
-        // The daemon answered; it is healthy. Its files must survive
-        // and the command must have executed exactly once.
-        #expect(FileManager.default.fileExists(atPath: paths.socketURL.path))
-        #expect(paths.readPidfile() == pidBefore)
-        #expect(FakeCommandState.executeCount == 1)
-
-        await DaemonClient.stopDaemon(paths: paths, timeout: 2.0)
-        _ = try? await task.value
     }
 
     @Test("transient_booting is retried once against the same daemon, then succeeds")
@@ -372,18 +372,18 @@ struct DaemonClientInvokeErrorRoutingTests {
         defer { removeTempDirectory(tmp) }
 
         let udid = "TEST-TRANSIENT-\(UUID().uuidString.prefix(8))"
-        let (paths, task) = try await startTestDaemon(udid: udid, baseDirectory: tmp)
-        defer { task.cancel() }
-        let pidBefore = paths.readPidfile()
-
-        // Message shape matches DaemonErrorKind.classify's
-        // transient_booting detection.
-        FakeCommandState.reset(
-            failures: 1,
-            message: "Simulator is unavailable as it is not booted"
-        )
-
         try await withParser({ _ in FakeFlakyCommand() }) {
+            let (paths, task) = try await startTestDaemon(udid: udid, baseDirectory: tmp)
+            defer { task.cancel() }
+            let pidBefore = paths.readPidfile()
+
+            // Message shape matches DaemonErrorKind.classify's
+            // transient_booting detection.
+            FakeCommandState.reset(
+                failures: 1,
+                message: "Simulator is unavailable as it is not booted"
+            )
+
             let responseData = try await DaemonClient.invoke(
                 command: "fake-flaky",
                 args: [],
@@ -394,13 +394,13 @@ struct DaemonClientInvokeErrorRoutingTests {
             let envelope = try JSONDecoder().decode(SuccessEnvelope.self, from: responseData)
             #expect(envelope.ok == true)
             #expect(envelope.data.value == "ok")
+
+            #expect(FakeCommandState.executeCount == 2)
+            #expect(paths.readPidfile() == pidBefore)
+
+            await DaemonClient.stopDaemon(paths: paths, timeout: 2.0)
+            _ = try? await task.value
         }
-
-        #expect(FakeCommandState.executeCount == 2)
-        #expect(paths.readPidfile() == pidBefore)
-
-        await DaemonClient.stopDaemon(paths: paths, timeout: 2.0)
-        _ = try? await task.value
     }
 
     @Test("Cancellation during the retry delay propagates without killing the daemon")
@@ -409,19 +409,16 @@ struct DaemonClientInvokeErrorRoutingTests {
         defer { removeTempDirectory(tmp) }
 
         let udid = "TEST-CANCEL-\(UUID().uuidString.prefix(8))"
-        let (paths, task) = try await startTestDaemon(udid: udid, baseDirectory: tmp)
-        defer { task.cancel() }
-        let pidBefore = paths.readPidfile()
-
-        FakeCommandState.reset(
-            failures: .max,
-            message: "Simulator is unavailable as it is not booted"
-        )
-
-        // The closure handles every error itself (invoke runs in an
-        // unstructured Task whose result is consumed by do/catch); the
-        // `try` is for `withParser` acquiring the shared parser gate.
         try await withParser({ _ in FakeFlakyCommand() }) {
+            let (paths, task) = try await startTestDaemon(udid: udid, baseDirectory: tmp)
+            defer { task.cancel() }
+            let pidBefore = paths.readPidfile()
+
+            FakeCommandState.reset(
+                failures: .max,
+                message: "Simulator is unavailable as it is not booted"
+            )
+
             // Long retry delay so the cancel lands inside the retry
             // sleep — the only suspension point on the fast path.
             let invokeTask = Task {
@@ -445,16 +442,16 @@ struct DaemonClientInvokeErrorRoutingTests {
             } catch {
                 Issue.record("expected CancellationError, got \(error)")
             }
+
+            // A cancelled call must not be misread as a stale daemon: no
+            // file cleanup, no respawn, no re-execution.
+            #expect(FileManager.default.fileExists(atPath: paths.socketURL.path))
+            #expect(paths.readPidfile() == pidBefore)
+            #expect(FakeCommandState.executeCount == 1)
+
+            await DaemonClient.stopDaemon(paths: paths, timeout: 2.0)
+            _ = try? await task.value
         }
-
-        // A cancelled call must not be misread as a stale daemon: no
-        // file cleanup, no respawn, no re-execution.
-        #expect(FileManager.default.fileExists(atPath: paths.socketURL.path))
-        #expect(paths.readPidfile() == pidBefore)
-        #expect(FakeCommandState.executeCount == 1)
-
-        await DaemonClient.stopDaemon(paths: paths, timeout: 2.0)
-        _ = try? await task.value
     }
 
     @Test("Non-finite retry delay is tolerated instead of trapping")
@@ -463,18 +460,18 @@ struct DaemonClientInvokeErrorRoutingTests {
         defer { removeTempDirectory(tmp) }
 
         let udid = "TEST-INF-\(UUID().uuidString.prefix(8))"
-        let (paths, task) = try await startTestDaemon(udid: udid, baseDirectory: tmp)
-        defer { task.cancel() }
-
-        FakeCommandState.reset(
-            failures: 1,
-            message: "Simulator is unavailable as it is not booted"
-        )
-
-        // `transientRetryDelay` is public API: a non-finite value must
-        // not trap in the nanosecond conversion. Semantics: skip the
-        // pause and retry immediately.
         try await withParser({ _ in FakeFlakyCommand() }) {
+            let (paths, task) = try await startTestDaemon(udid: udid, baseDirectory: tmp)
+            defer { task.cancel() }
+
+            FakeCommandState.reset(
+                failures: 1,
+                message: "Simulator is unavailable as it is not booted"
+            )
+
+            // `transientRetryDelay` is public API: a non-finite value must
+            // not trap in the nanosecond conversion. Semantics: skip the
+            // pause and retry immediately.
             let responseData = try await DaemonClient.invoke(
                 command: "fake-flaky",
                 args: [],
@@ -484,11 +481,11 @@ struct DaemonClientInvokeErrorRoutingTests {
             )
             let envelope = try JSONDecoder().decode(SuccessEnvelope.self, from: responseData)
             #expect(envelope.ok == true)
-        }
-        #expect(FakeCommandState.executeCount == 2)
+            #expect(FakeCommandState.executeCount == 2)
 
-        await DaemonClient.stopDaemon(paths: paths, timeout: 2.0)
-        _ = try? await task.value
+            await DaemonClient.stopDaemon(paths: paths, timeout: 2.0)
+            _ = try? await task.value
+        }
     }
 
     @Test("transient_booting persisting past one retry propagates without further attempts")
@@ -497,15 +494,15 @@ struct DaemonClientInvokeErrorRoutingTests {
         defer { removeTempDirectory(tmp) }
 
         let udid = "TEST-TRANSIENT2-\(UUID().uuidString.prefix(8))"
-        let (paths, task) = try await startTestDaemon(udid: udid, baseDirectory: tmp)
-        defer { task.cancel() }
-
-        FakeCommandState.reset(
-            failures: .max,
-            message: "Simulator is unavailable as it is not booted"
-        )
-
         try await withParser({ _ in FakeFlakyCommand() }) {
+            let (paths, task) = try await startTestDaemon(udid: udid, baseDirectory: tmp)
+            defer { task.cancel() }
+
+            FakeCommandState.reset(
+                failures: .max,
+                message: "Simulator is unavailable as it is not booted"
+            )
+
             do {
                 _ = try await DaemonClient.invoke(
                     command: "fake-flaky",
@@ -522,15 +519,15 @@ struct DaemonClientInvokeErrorRoutingTests {
                 }
                 #expect(kind == .transientBooting)
             }
+
+            // Exactly one retry: original attempt + one re-send.
+            #expect(FakeCommandState.executeCount == 2)
+            // The daemon stays up — booting is the simulator's problem,
+            // not the daemon's.
+            #expect(FileManager.default.fileExists(atPath: paths.socketURL.path))
+
+            await DaemonClient.stopDaemon(paths: paths, timeout: 2.0)
+            _ = try? await task.value
         }
-
-        // Exactly one retry: original attempt + one re-send.
-        #expect(FakeCommandState.executeCount == 2)
-        // The daemon stays up — booting is the simulator's problem,
-        // not the daemon's.
-        #expect(FileManager.default.fileExists(atPath: paths.socketURL.path))
-
-        await DaemonClient.stopDaemon(paths: paths, timeout: 2.0)
-        _ = try? await task.value
     }
 }

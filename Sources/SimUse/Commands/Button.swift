@@ -3,6 +3,7 @@ import ArgumentParser
 import Foundation
 import SimUseCore
 import AndroidBackend
+import HarmonyBackend
 import iOSSimBackend
 
 /// Top-level cross-platform `button` verb. Owns the flag surface and
@@ -18,11 +19,21 @@ import iOSSimBackend
 struct Button: SimUseExecutableCommand {
     typealias ExecutionResult = IOSSimButtonCommand.ExecutionResult
 
+    struct ButtonArgument: ExpressibleByArgument {
+        let rawValue: String
+        init?(argument: String) {
+            guard argument == "power" || ButtonType(argument: argument) != nil else { return nil }
+            rawValue = argument
+        }
+        static var allValueStrings: [String] { ButtonType.allCases.map(\.rawValue) + ["power"] }
+    }
+
     static let configuration = CommandConfiguration(
         abstract: "Press a hardware button on the simulator or Android device.",
         discussion: """
         iOS:     home, lock, apple-pay, side-button, siri
         Android: home, back, lock, recents
+        Harmony: home, back, power
 
         Examples:
           sim-use button home --udid SIMULATOR_UDID
@@ -31,8 +42,12 @@ struct Button: SimUseExecutableCommand {
         """
     )
 
-    @Argument(help: "The button to press.")
-    var buttonType: ButtonType
+    @Argument(help: "The button to press (Harmony: home, back, power).")
+    var selectedButton: ButtonArgument
+
+    var buttonName: String { selectedButton.rawValue }
+
+    var buttonType: ButtonType { ButtonType(rawValue: buttonName) ?? .lock }
 
     @Option(name: .customLong("duration"), help: "Duration to hold the button in seconds (iOS only; ignored for Android).")
     var duration: Double?
@@ -50,7 +65,8 @@ struct Button: SimUseExecutableCommand {
     var simulatorUDIDForDaemon: String? { device.resolved }
 
     func format(_ result: ExecutionResult) -> CommandOutput {
-        .line("✓ \(buttonType.description) press completed successfully")
+        if buttonName == "power" { return .line("Power press completed successfully") }
+        return .line("✓ \(buttonType.description) press completed successfully")
     }
 
     func validate() throws {
@@ -58,7 +74,17 @@ struct Button: SimUseExecutableCommand {
     }
 
     func execute() async throws -> ExecutionResult {
-        switch PlatformRouter.resolve(udid: device.resolved) {
+        let platform = try PlatformRouter.resolve(udid: device.resolved)
+        if buttonName == "power", platform != .harmony {
+            throw CLIError(errorDescription: "`button power` is Harmony-only; use `button lock` on iOS or Android.")
+        }
+        switch platform {
+        case .harmony:
+            guard duration == nil else {
+                throw CLIError(errorDescription: "Harmony button does not support --duration.")
+            }
+            try HarmonyButtonCommand.performPress(udid: device.resolved, button: buttonName)
+            return ExecutionResult()
         case .android:
             return try executeAndroid()
         case .iOSDevice:

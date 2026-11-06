@@ -30,7 +30,7 @@ import Foundation
 public struct DeviceOptions: ParsableArguments {
     @Option(
         name: .customLong("device"),
-        help: "Target device — iOS Simulator UDID or Android adb serial. Auto-detected by string shape. Optional — defaults to the only booted iOS simulator on the host (or to the SIM_USE_DEVICE / SIM_USE_UDID env var when set)."
+        help: "Target device — iOS Simulator UDID, Android adb serial or Harmony hdc serial. Harmony requires --device or SIM_USE_DEVICE. Otherwise defaults to the single live non-Harmony daemon or booted iOS simulator."
     )
     public var device: String?
 
@@ -62,6 +62,11 @@ public struct DeviceOptions: ParsableArguments {
     /// FBSimulatorControl.
     public mutating func resolve(allowPhysical: Bool = false) throws {
         let explicit = try Self.selectExplicit(device: device, udid: udid)
+        let environment = ProcessInfo.processInfo.environment
+        let hasExplicitSelection = explicit != nil
+            || !(environment["SIM_USE_DEVICE"]?.trimmingCharacters(in: .whitespaces).isEmpty ?? true)
+            || !(environment["SIM_USE_UDID"]?.trimmingCharacters(in: .whitespaces).isEmpty ?? true)
+        PlatformRouter.implicitDevice = nil
         if let arg = explicit, PlatformRouter.looksLikeAndroid(arg) {
             resolved = arg
             return
@@ -74,6 +79,7 @@ public struct DeviceOptions: ParsableArguments {
             throw PhysicalIOSDeviceError(identifier: candidate)
         }
         resolved = candidate
+        if !hasExplicitSelection { PlatformRouter.implicitDevice = candidate }
     }
 
     /// Apply the same `--device` / `--udid` mutual-exclusion rule used

@@ -253,7 +253,12 @@ public enum DaemonDispatch {
         // diagnostic doesn't read like an iOS-only message.
         let message: String
         let hint: String
-        if PlatformRouter.looksLikeAndroid(udid) {
+        // The daemon pins its platform at startup. A disconnected target
+        // cannot be rediscovered reliably, and cleanup must not probe hdc.
+        if PlatformRouter.platformOverride == .harmony {
+            message = "sim-use daemon: Harmony device \(udid) is not reachable via hdc; daemon is shutting down. Underlying error: \(underlying)"
+            hint = "Verify the device is connected (`hdc list targets`) and retry."
+        } else if PlatformRouter.looksLikeAndroid(udid) {
             message = """
                 sim-use daemon: Android device \(udid) is not reachable via adb; \
                 daemon is shutting down so the next call re-spawns once the \

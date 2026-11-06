@@ -69,7 +69,7 @@ struct Touch: SimUseExecutableCommand {
 
     mutating func resolveDeferredArguments() throws {
         try device.resolve(allowPhysical: true)
-        if PlatformRouter.looksLikeAndroid(device.resolved) {
+        if try PlatformRouter.resolve(udid: device.resolved) == .android {
             try rejectAndroidSplitForm()
         }
     }
@@ -97,7 +97,9 @@ struct Touch: SimUseExecutableCommand {
     }
 
     func execute() async throws -> ExecutionResult {
-        switch PlatformRouter.resolve(udid: device.resolved) {
+        switch try PlatformRouter.resolve(udid: device.resolved) {
+        case .harmony:
+            throw CLIError(errorDescription: "`touch` is not supported on Harmony; use `tap` or `long-press`.")
         case .android:
             return try executeAndroid()
         case .iOSDevice:

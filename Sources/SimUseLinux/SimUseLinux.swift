@@ -20,7 +20,7 @@ enum EntryPoint {
         // A per-device daemon only serves clients configured for the same
         // connection (for Android: the adb server and bridge host), so both
         // sides of the daemon protocol need to compute it.
-        DaemonClient.connectionIdentityProvider = { udid in
+        DaemonClient.connectionIdentityProvider = { udid, _ in
             BridgeConnection.daemonConnectionIdentity(udid: udid)
         }
         // Verbs this build leaves out would otherwise be parsed as an

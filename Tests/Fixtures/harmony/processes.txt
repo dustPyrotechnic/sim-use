@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# Selected unchanged rows from hdc shell ps -A -o PID,NAME, 2026-11-04.
+   PID NAME
+     1 init
+   608 appspawn
+  3229 com.ohos.sceneboard
+  4494 com.ohos.sceneboard:EngineServiceAbility:1
+ 17290 com.baidu.baiduapp
+ 18080 com.baidu.baiduapp:render
+ 23150 com.huawei.hmos.inputmethod:inputMethod

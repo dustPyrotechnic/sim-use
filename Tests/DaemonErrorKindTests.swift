@@ -63,6 +63,28 @@ struct DaemonErrorKindClassifyTests {
         let error = MessageError("Simulator ABCD failed as it is not booted")
         #expect(DaemonErrorKind.classify(error) == .transientBooting)
     }
+
+    @Test("hdc unknown-target transport failures map to staleSimulator", arguments: [(0, ""), (1, "\n"), (0, "\r\n")])
+    func harmonyUnknownTargetIsStale(exitCode: Int, ending: String) {
+        let error = MessageError("hdc failed (\(exitCode)): [Fail]Not match target founded, check connect-key please\(ending)")
+        #expect(DaemonErrorKind.classify(error) == .staleSimulator)
+    }
+
+    @Test("Harmony tool and UI errors do not imply a stale device", arguments: [
+        "hdc failed (1): uitest: component not found",
+        "hdc failed (1): /system/bin/sh: uitest: not found",
+        "hdc failed (1): [Fail]Permission denied",
+        "hdc timed out after 30 seconds",
+        "hdc binary not found",
+        "uitest failed: [Fail]Not match target founded, check connect-key please",
+        "[Fail]Not match target founded, check connect-key please",
+        "hdc failed (1): uitest failed: [Fail]Not match target founded, check connect-key please",
+        "hdc failed (1): uitest failed (0): [Fail]Not match target founded, check connect-key please",
+        "hdc failed (unknown): [Fail]Not match target founded, check connect-key please",
+    ])
+    func harmonyOrdinaryErrorsAreNotStale(message: String) {
+        #expect(DaemonErrorKind.classify(MessageError(message)) == .other)
+    }
 }
 
 // MARK: - Raw value / wire format

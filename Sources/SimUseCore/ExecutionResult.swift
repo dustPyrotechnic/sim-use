@@ -13,6 +13,7 @@ public struct DescribeUIResult: Codable, Equatable, Sendable {
         // either way so the JSON envelope is unaffected.
         case ios
         case android
+        case harmony
     }
 
     public let platform: Platform

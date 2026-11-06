@@ -39,11 +39,12 @@ public enum DaemonClient {
 
         let paths = DaemonPaths(udid: udid, baseDirectory: baseDirectory)
         try paths.ensureBaseDirectory()
+        let platform = try platformForInvocation(command: command, udid: udid)
 
         // Read once: the gate below and every request this call sends
         // must agree on the connection, so the daemon can refuse a
         // request the gate could not vet (see `connectionMismatchOutcome`).
-        let identity = connectionIdentity(for: udid)
+        let identity = connectionIdentity(for: udid, platform: platform)
 
         var liveness = paths.filesystemLiveness()
         trace("invoke cmd=\(command) liveness=\(liveness)")
@@ -104,7 +105,7 @@ public enum DaemonClient {
 
         // No live daemon: spawn a detached one and wait for it.
         trace("spawning fresh daemon")
-        try spawnDaemon(udid: udid, paths: paths)
+        try spawnDaemon(udid: udid, paths: paths, platform: platform)
         try await waitForSocket(paths: paths, timeout: 5.0)
         trace("socket ready after spawn")
 
@@ -308,12 +309,12 @@ public enum DaemonClient {
     /// by each executable's entry point (backends live above SimUseCore);
     /// nil means the target has no such dependency. Read on both sides:
     /// the daemon reports its value in `_ping`, the client compares.
-    nonisolated(unsafe) public static var connectionIdentityProvider: ((_ udid: String) -> String?)?
+    nonisolated(unsafe) public static var connectionIdentityProvider: ((_ udid: String, _ platform: Platform?) -> String?)?
 
-    /// The identity `connectionIdentityProvider` gives `udid`, or nil when
-    /// no provider is installed.
-    public static func connectionIdentity(for udid: String) -> String? {
-        connectionIdentityProvider?(udid)
+    /// The identity for an already-resolved or daemon-pinned platform.
+    /// Discovery belongs at the throwing invocation/startup boundary, never here.
+    public static func connectionIdentity(for udid: String, platform: Platform?) -> String? {
+        connectionIdentityProvider?(udid, platform)
     }
 
     /// Pure comparator: decides whether an extant daemon should be
@@ -469,14 +470,30 @@ public enum DaemonClient {
 
     // MARK: - Spawn
 
-    private static func spawnDaemon(udid: String, paths: DaemonPaths) throws {
+    public static func platformForInvocation(command: String, udid: String) throws -> Platform? {
+        switch command {
+        case "harmony": return .harmony
+        case "android": return .android
+        case "ios": return .iOSSim
+        case "ios-device": return .iOSDevice
+        default: return try PlatformRouter.resolve(udid: udid)
+        }
+    }
+
+    public static func daemonArguments(udid: String, platform: Platform?) -> [String] {
+        var arguments = ["daemon", "start", "--udid", udid]
+        if let platform { arguments += ["--platform", platform.rawValue] }
+        return arguments
+    }
+
+    private static func spawnDaemon(udid: String, paths: DaemonPaths, platform: Platform?) throws {
         guard let executablePath = Bundle.main.executablePath else {
             throw DaemonClientError.cannotLocateExecutable
         }
 
         let task = Process()
         task.executableURL = URL(fileURLWithPath: executablePath)
-        task.arguments = ["daemon", "start", "--udid", udid]
+        task.arguments = daemonArguments(udid: udid, platform: platform)
         task.standardInput = FileHandle(forReadingAtPath: "/dev/null")
 
         // Daemon stderr (incl. SimUseLogger output + SIM_USE_PERF timings) goes

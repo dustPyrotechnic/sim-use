@@ -66,7 +66,9 @@ struct RecordVideo: SimUseExecutableCommand {
     }
 
     func execute() async throws -> ExecutionResult {
-        switch PlatformRouter.resolve(udid: device.resolved) {
+        switch try PlatformRouter.resolve(udid: device.resolved) {
+        case .harmony:
+            throw CLIError(errorDescription: "`record-video` is not supported on Harmony; use `screenshot`.")
         case .android:
             return try await executeAndroid()
         case .iOSDevice:

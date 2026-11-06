@@ -3,6 +3,7 @@ import ArgumentParser
 import Foundation
 import SimUseCore
 import AndroidBackend
+import HarmonyBackend
 import iOSSimBackend
 import iOSDeviceBackend
 
@@ -21,12 +22,12 @@ struct Screenshot: SimUseExecutableCommand {
 
     static let configuration = CommandConfiguration(
         commandName: "screenshot",
-        abstract: "Capture a screenshot from the simulator display and save it as a PNG file"
+        abstract: "Capture a screenshot from the device display and save it as a PNG file"
     )
 
     @OptionGroup var device: DeviceOptions
 
-    @Option(help: "Output PNG file path. Defaults to 'Simulator Screenshot - <device name> - <timestamp>.png' in the current directory.")
+    @Option(help: "Output PNG file path or directory. Defaults to a timestamped device screenshot in the current directory.")
     var output: String?
 
     @OptionGroup var json: JSONOutputOptions
@@ -49,7 +50,10 @@ struct Screenshot: SimUseExecutableCommand {
     }
 
     func execute() async throws -> ExecutionResult {
-        switch PlatformRouter.resolve(udid: device.resolved) {
+        switch try PlatformRouter.resolve(udid: device.resolved) {
+        case .harmony:
+            let result = try HarmonyScreenshotCommand.performScreenshot(udid: device.resolved, output: output)
+            return ExecutionResult(path: result.path)
         case .android:
             return try executeAndroid()
         case .iOSDevice:

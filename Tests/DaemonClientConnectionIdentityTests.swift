@@ -124,8 +124,8 @@ struct DaemonClientConnectionIdentityTests {
         body: () async throws -> Void
     ) async rethrows {
         let saved = DaemonClient.connectionIdentityProvider
-        DaemonClient.connectionIdentityProvider = { candidate in
-            candidate == udid ? connection.identity : saved?(candidate)
+        DaemonClient.connectionIdentityProvider = { candidate, platform in
+            candidate == udid ? connection.identity : saved?(candidate, platform)
         }
         defer { DaemonClient.connectionIdentityProvider = saved }
         try await body()
@@ -145,15 +145,15 @@ struct DaemonClientConnectionIdentityTests {
         defer { try? FileManager.default.removeItem(at: tmp) }
 
         let udid = "emulator-\(Int.random(in: 5554...5680))"
-        let (paths, task) = try await startTestDaemon(udid: udid, connectionIdentity: "adb=A", baseDirectory: tmp)
-        defer { task.cancel() }
-        let pidBefore = paths.readPidfile()
-
-        // Longer than the 2 s `_ping` timeout, so B's probe is inconclusive.
-        SlowCommandState.reset(duration: 3.5)
-        let connection = ClientConnection("adb=A")
-
         try await withExclusiveCommandParser({ _ in FakeSlowCommand() }) {
+            let (paths, task) = try await startTestDaemon(udid: udid, connectionIdentity: "adb=A", baseDirectory: tmp)
+            defer { task.cancel() }
+            let pidBefore = paths.readPidfile()
+
+            // Longer than the 2 s `_ping` timeout, so B's probe is inconclusive.
+            SlowCommandState.reset(duration: 3.5)
+            let connection = ClientConnection("adb=A")
+
             try await withClientConnection(connection, udid: udid) {
                 let requestA = Task {
                     try await DaemonClient.invoke(command: "fake-slow", args: [], udid: udid, baseDirectory: tmp)
@@ -178,14 +178,14 @@ struct DaemonClientConnectionIdentityTests {
                 // A's request was not disturbed.
                 _ = try await requestA.value
             }
+
+            #expect(SlowCommandState.executeCount == 1)
+            // The probe was inconclusive, so the daemon was not restarted.
+            #expect(paths.readPidfile() == pidBefore)
+
+            await DaemonClient.stopDaemon(paths: paths, timeout: 2.0)
+            _ = try? await task.value
         }
-
-        #expect(SlowCommandState.executeCount == 1)
-        // The probe was inconclusive, so the daemon was not restarted.
-        #expect(paths.readPidfile() == pidBefore)
-
-        await DaemonClient.stopDaemon(paths: paths, timeout: 2.0)
-        _ = try? await task.value
     }
 
     @Test("The transient_booting retry carries the identity read at invoke entry")
@@ -194,13 +194,13 @@ struct DaemonClientConnectionIdentityTests {
         defer { try? FileManager.default.removeItem(at: tmp) }
 
         let udid = "emulator-\(Int.random(in: 5554...5680))"
-        let (paths, task) = try await startTestDaemon(udid: udid, connectionIdentity: "adb=A", baseDirectory: tmp)
-        defer { task.cancel() }
-
-        SlowCommandState.reset(duration: 0.3, failures: 1)
-        let connection = ClientConnection("adb=A")
-
         try await withExclusiveCommandParser({ _ in FakeSlowCommand() }) {
+            let (paths, task) = try await startTestDaemon(udid: udid, connectionIdentity: "adb=A", baseDirectory: tmp)
+            defer { task.cancel() }
+
+            SlowCommandState.reset(duration: 0.3, failures: 1)
+            let connection = ClientConnection("adb=A")
+
             try await withClientConnection(connection, udid: udid) {
                 let request = Task {
                     try await DaemonClient.invoke(
@@ -217,11 +217,11 @@ struct DaemonClientConnectionIdentityTests {
                 connection.identity = "adb=B"
                 _ = try await request.value
             }
+
+            #expect(SlowCommandState.executeCount == 2)
+
+            await DaemonClient.stopDaemon(paths: paths, timeout: 2.0)
+            _ = try? await task.value
         }
-
-        #expect(SlowCommandState.executeCount == 2)
-
-        await DaemonClient.stopDaemon(paths: paths, timeout: 2.0)
-        _ = try? await task.value
     }
 }

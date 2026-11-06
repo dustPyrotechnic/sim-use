@@ -3,6 +3,7 @@ import ArgumentParser
 import Foundation
 import SimUseCore
 import AndroidBackend
+import HarmonyBackend
 import iOSSimBackend
 import iOSDeviceBackend
 
@@ -11,8 +12,8 @@ import iOSDeviceBackend
 /// command (`IOSSimDescribeUICommand` for iOS Simulator UDIDs,
 /// `AndroidDescribeUICommand.performDescribeUI` for adb serials).
 ///
-/// `--include-offscreen` is Android-only — silently ignored on iOS
-/// (the iOS pipeline has no equivalent visibility flag).
+/// `--include-offscreen` disables Android/Harmony visibility filtering;
+/// it is ignored on iOS (the iOS pipeline has no equivalent flag).
 struct DescribeUI: SimUseExecutableCommand {
     typealias ExecutionResult = IOSSimDescribeUICommand.ExecutionResult
 
@@ -80,7 +81,7 @@ struct DescribeUI: SimUseExecutableCommand {
 
     @Flag(
         name: .customLong("include-offscreen"),
-        help: "Android-only. Include nodes whose `isVisibleToUser` is false (recycled list cells, off-screen ViewPager neighbours, fragments mid-detach). Default is to filter them out — they pad the outline with rows the user can't actually see. Ignored on iOS (the iOS pipeline has no equivalent visibility flag)."
+        help: "Android/HarmonyOS: include hidden and offscreen elements; on HarmonyOS also bypass keyboard coverage filtering. Diagnostic output only. Ignored on iOS."
     )
     var includeOffscreen: Bool = false
 
@@ -101,7 +102,19 @@ struct DescribeUI: SimUseExecutableCommand {
     }
 
     func execute() async throws -> ExecutionResult {
-        switch PlatformRouter.resolve(udid: device.resolved) {
+        switch try PlatformRouter.resolve(udid: device.resolved) {
+        case .harmony:
+            guard point == nil else {
+                throw CLIError(errorDescription: "describe-ui --point is not supported on Harmony.")
+            }
+            let result = try HarmonyDescribeUICommand.performDescribeUI(
+                udid: device.resolved, includeOffscreen: includeOffscreen, includeRaw: jsonOutput && !noRaw
+            )
+            return ExecutionResult(
+                platform: result.platform.rawValue, raw: result.raw, outline: result.outline,
+                entries: result.entries, lists: result.lists, screen: result.screen,
+                appLabel: result.appLabel, appPackage: result.appPackage, crashDialog: result.crashDialog
+            )
         case .android:
             return try executeAndroid()
         case .iOSDevice:

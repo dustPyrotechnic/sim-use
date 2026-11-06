@@ -100,7 +100,9 @@ struct Paste: SimUseExecutableCommand {
     }
 
     func execute() async throws -> ExecutionResult {
-        switch PlatformRouter.resolve(udid: device.resolved) {
+        switch try PlatformRouter.resolve(udid: device.resolved) {
+        case .harmony:
+            throw CLIError(errorDescription: "`paste` is not supported on Harmony; use `type` (replaces the device pasteboard).")
         case .android:
             return try executeAndroid()
         case .iOSDevice:

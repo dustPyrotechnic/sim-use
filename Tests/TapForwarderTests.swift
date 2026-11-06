@@ -29,21 +29,21 @@ struct TapForwarderTests {
     // MARK: - Platform routing decision
 
     @Test("iOS Simulator UDID routes to iOSSim")
-    func iosUdidRoutesToIOSSim() {
+    func iosUdidRoutesToIOSSim() throws {
         let udid = "9CD7C6E7-45B3-4E59-BBF2-4D12A9457CD0"
-        #expect(PlatformRouter.resolve(udid: udid) == .iOSSim)
+        #expect(try PlatformRouter.resolve(udid: udid) == .iOSSim)
         #expect(PlatformRouter.looksLikeAndroid(udid) == false)
     }
 
     @Test("Android emulator serial routes to android")
-    func emulatorUdidRoutesToAndroid() {
+    func emulatorUdidRoutesToAndroid() throws {
         let udid = "emulator-5554"
-        #expect(PlatformRouter.resolve(udid: udid) == .android)
+        #expect(try PlatformRouter.resolve(udid: udid) == .android)
         #expect(PlatformRouter.looksLikeAndroid(udid))
     }
 
     @Test("Adb device serial routes to android")
-    func realDeviceSerialRoutesToAndroid() {
+    func realDeviceSerialRoutesToAndroid() throws {
         // Representative real-device serials from the matrix the
         // bridge has been tested against.
         let serials = [
@@ -53,19 +53,19 @@ struct TapForwarderTests {
             "192.168.1.5:5555",
         ]
         for serial in serials {
-            #expect(PlatformRouter.resolve(udid: serial) == .android,
+            #expect(try PlatformRouter.resolve(udid: serial) == .android,
                     "expected \(serial) to route to android")
         }
     }
 
     @Test("Empty UDID returns nil and forwarder defaults to iOSSim")
-    func emptyUdidNilThenIOSDefault() {
-        #expect(PlatformRouter.resolve(udid: "") == nil)
+    func emptyUdidNilThenIOSDefault() throws {
+        #expect(try PlatformRouter.resolve(udid: "") == nil)
         // The `Tap.execute()` switch treats `.none` and `.iOSSim` as
         // the same branch — when we can't classify, the iOS resolver
         // owns the failure surface. Mirror that here so the test is
         // tied to the same decision.
-        let routed: Platform = PlatformRouter.resolve(udid: "") ?? .iOSSim
+        let routed: Platform = try PlatformRouter.resolve(udid: "") ?? .iOSSim
         #expect(routed == .iOSSim)
     }
 

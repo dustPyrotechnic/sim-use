@@ -46,6 +46,24 @@ public struct DaemonPaths {
         baseDirectory.appendingPathComponent("\(udid).log", isDirectory: false)
     }
 
+    /// Optional metadata sidecar; older clients keep reading the unchanged PID file.
+    public var platformURL: URL {
+        baseDirectory.appendingPathComponent("\(udid).platform", isDirectory: false)
+    }
+
+    private struct PlatformFootprint: Codable {
+        let pid: pid_t
+        let platform: Platform
+    }
+
+    public func readPlatform() -> Platform? {
+        guard let pid = readPidfile(),
+              let data = try? Data(contentsOf: platformURL),
+              let footprint = try? JSONDecoder().decode(PlatformFootprint.self, from: data),
+              footprint.pid == pid else { return nil }
+        return footprint.platform
+    }
+
     /// Create the base directory with mode 0700 if missing. Idempotent;
     /// safe to call from both the client (before probing) and the server
     /// (before binding) on every invocation.
@@ -109,9 +127,15 @@ public struct DaemonPaths {
         return pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
-    public func writePidfile(_ pid: pid_t) throws {
+    public func writePidfile(_ pid: pid_t, platform: Platform? = nil) throws {
         let data = Data("\(pid)\n".utf8)
         try data.write(to: pidfileURL, options: .atomic)
+        if let platform {
+            try JSONEncoder().encode(PlatformFootprint(pid: pid, platform: platform))
+                .write(to: platformURL, options: .atomic)
+        } else {
+            try? FileManager.default.removeItem(at: platformURL)
+        }
     }
 
     public func removeSocket() {
@@ -120,6 +144,7 @@ public struct DaemonPaths {
 
     public func removePidfile() {
         try? FileManager.default.removeItem(at: pidfileURL)
+        try? FileManager.default.removeItem(at: platformURL)
     }
 
     /// `kill(pid, 0)` returns 0 when the process exists and we have
@@ -182,11 +207,13 @@ public struct DaemonPaths {
         public let udid: String
         public let pid: pid_t
         public let paths: DaemonPaths
+        public let platform: Platform?
 
-        public init(udid: String, pid: pid_t, paths: DaemonPaths) {
+        public init(udid: String, pid: pid_t, paths: DaemonPaths, platform: Platform? = nil) {
             self.udid = udid
             self.pid = pid
             self.paths = paths
+            self.platform = platform ?? paths.readPlatform()
         }
     }
 

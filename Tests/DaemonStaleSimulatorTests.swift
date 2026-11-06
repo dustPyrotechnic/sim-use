@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 @testable import SimUse
 @testable import iOSSimBackend
+import ArgumentParser
 import Foundation
 import Testing
 @testable import SimUseCore
@@ -20,7 +21,20 @@ import Testing
 // message, the daemon-shutdown bit, and the wire shape of the
 // envelope.
 
-@Suite("DaemonDispatch.staleSimulatorOutcome")
+private struct HarmonyDispatchFailureCommand: SimUseExecutableCommand {
+    static let configuration = CommandConfiguration(commandName: "harmony-dispatch-failure")
+    var message = ""
+    var jsonOutput: Bool { false }
+    var managesLivenessState: Bool { true }
+
+    func execute() async throws -> String {
+        throw CLIError(errorDescription: message)
+    }
+
+    func format(_ result: String) -> CommandOutput { .line(result) }
+}
+
+@Suite("DaemonDispatch.staleSimulatorOutcome", .serialized)
 @MainActor
 struct DaemonStaleSimulatorOutcomeTests {
     private struct Envelope: Decodable {
@@ -87,6 +101,63 @@ struct DaemonStaleSimulatorOutcomeTests {
         #expect(envelope.error.contains(udid))
         #expect(envelope.hint?.contains("adb devices") == true)
         #expect(envelope.hint?.contains("daemon stop") == true)
+    }
+
+    @Test("Harmony dispatch classifies only a disconnected transport as stale", arguments: [
+        ("hdc failed (0): [Fail]Not match target founded, check connect-key please", true),
+        ("hdc failed (1): [Fail]Not match target founded, check connect-key please", true),
+        ("hdc failed (0): [Fail]Not match target founded, check connect-key please\r\n", true),
+        ("hdc failed (1): uitest failed (0): [Fail]Not match target founded, check connect-key please", false),
+        ("hdc failed (1): uitest: component not found", false),
+        ("hdc failed (1): /system/bin/sh: uitest: not found", false),
+        ("hdc failed (1): [Fail]Permission denied", false),
+        ("hdc binary not found", false),
+        ("hdc timed out after 30 seconds", false),
+        ("uitest failed: [Fail]Not match target founded, check connect-key please", false),
+    ])
+    func harmonyDispatchFailure(message: String, isStale: Bool) async throws {
+        try await withExclusiveCommandParser({ _ in HarmonyDispatchFailureCommand(message: message) }) {
+            let savedPlatform = PlatformRouter.platformOverride
+            let savedProbe = PlatformRouter.harmonyMembershipProbe
+            let savedCleanup = DaemonDispatch.platformStaleCleanup
+            defer {
+                PlatformRouter.platformOverride = savedPlatform
+                PlatformRouter.harmonyMembershipProbe = savedProbe
+                DaemonDispatch.platformStaleCleanup = savedCleanup
+            }
+            PlatformRouter.platformOverride = .harmony
+            var probes = 0
+            PlatformRouter.harmonyMembershipProbe = { _ in
+                probes += 1
+                throw CLIError(errorDescription: "hdc unavailable after disconnect")
+            }
+            var cleanedTargets: [String] = []
+            DaemonDispatch.platformStaleCleanup = { cleanedTargets.append($0) }
+            let udid = "TESTHARMONY000001"
+            let outcome = await DaemonDispatch.handle(
+                DaemonRequest(id: "harmony-failure", cmd: "harmony-dispatch-failure", args: []),
+                snapshot: .init(pid: 1, startTime: Date(), udid: udid, simUseVersion: "fixture")
+            )
+            let envelope = try JSONDecoder().decode(Envelope.self, from: outcome.responseData)
+            #expect(envelope.id == "harmony-failure")
+            #expect(!envelope.ok)
+            #expect(outcome.shouldStopDaemon == isStale)
+            #expect(probes == 0)
+            if isStale {
+                #expect(envelope.kind == DaemonErrorKind.staleSimulator.rawValue)
+                #expect(envelope.error.contains("Harmony"))
+                #expect(envelope.error.contains(udid))
+                #expect(envelope.error.contains(message))
+                #expect(envelope.hint?.contains("hdc list targets") == true)
+                #expect(!envelope.error.contains("adb"))
+                #expect(cleanedTargets == [udid])
+            } else {
+                #expect(envelope.kind == DaemonErrorKind.other.rawValue)
+                #expect(envelope.error == message)
+                #expect(envelope.hint == nil)
+                #expect(cleanedTargets.isEmpty)
+            }
+        }
     }
 
     @Test("nil request id is omitted from the wire envelope (no \"id\":null)")

@@ -3,6 +3,7 @@ import ArgumentParser
 import Foundation
 import SimUseCore
 import AndroidBackend
+import HarmonyBackend
 import iOSSimBackend
 
 /// Top-level cross-platform `long-press` verb. Mirrors `Tap`'s entire
@@ -25,7 +26,7 @@ struct LongPress: SimUseExecutableCommand {
     static let configuration = CommandConfiguration(
         commandName: "long-press",
         abstract: LongPressHelp.abstract,
-        discussion: LongPressHelp.discussion
+        discussion: LongPressHelp.discussion + "\n\n" + HarmonyTargetResolver.safetyHelp
     )
 
     @Argument(help: ArgumentHelp(
@@ -76,7 +77,22 @@ struct LongPress: SimUseExecutableCommand {
     }
 
     func execute() async throws -> ExecutionResult {
-        switch PlatformRouter.resolve(udid: device.resolved) {
+        switch try PlatformRouter.resolve(udid: device.resolved) {
+        case .harmony:
+            guard timing.waitTimeout == 0 else {
+                throw CLIError(errorDescription: "Harmony long-press does not support --wait-timeout.")
+            }
+            if let delay = timing.preDelay, delay > 0 {
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+            let result = try HarmonyLongPressCommand.performLongPress(
+                serial: device.resolved, alias: alias, targeting: targeting,
+                duration: duration, multiTouch: multiTouch
+            )
+            if let delay = timing.postDelay, delay > 0 {
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+            return ExecutionResult(x: result.x, y: result.y)
         case .android:
             return try executeAndroid()
         case .iOSDevice:

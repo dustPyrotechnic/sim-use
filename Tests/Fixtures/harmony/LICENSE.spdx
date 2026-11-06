@@ -1,0 +1,5 @@
+SPDX-License-Identifier: Apache-2.0
+
+Applies to *.json and *.wms in this directory. JSON and WMS fixtures retain
+the device wire formats; license comments are kept here instead of adding
+invalid JSON or synthetic rows to the captured window tables.

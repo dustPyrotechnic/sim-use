@@ -4,11 +4,15 @@ import Testing
 
 @Suite("Init Command Tests")
 struct InitTests {
-    @Test("print outputs skill content")
+    @Test("prints the skill with required frontmatter fields")
     func printOutputsSkill() async throws {
         let result = try await TestHelpers.runSimUseCommand("init --print")
-        #expect(result.output.contains("name: sim-use"))
-        #expect(result.output.contains("Drive iOS Simulator, Android emulator/device, and physical iPhone/iPad"))
+        let lines = result.output.components(separatedBy: .newlines)
+        #expect(lines.first == "---")
+        let closingDelimiter = try #require(lines.dropFirst().firstIndex(of: "---"))
+        let frontmatter = lines[1..<closingDelimiter]
+        #expect(frontmatter.contains("name: sim-use"))
+        #expect(frontmatter.contains { $0.hasPrefix("description:") })
     }
 
     @Test("installs skill to custom destination")

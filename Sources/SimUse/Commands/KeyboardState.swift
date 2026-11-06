@@ -3,6 +3,7 @@ import ArgumentParser
 import Foundation
 import SimUseCore
 import AndroidBackend
+import HarmonyBackend
 import iOSSimBackend
 
 /// Top-level cross-platform `keyboard-state` verb. Owns the flag
@@ -68,7 +69,10 @@ struct KeyboardState: SimUseExecutableCommand {
     var simulatorUDIDForDaemon: String? { device.resolved }
 
     func execute() async throws -> ExecutionResult {
-        switch PlatformRouter.resolve(udid: device.resolved) {
+        switch try PlatformRouter.resolve(udid: device.resolved) {
+        case .harmony:
+            let state = try HarmonyKeyboardStateCommand.performKeyboardState(udid: device.resolved)
+            return ExecutionResult(platform: "harmony", visible: state.visible, imePackage: nil)
         case .android:
             let state = try AndroidKeyboardStateCommand.performKeyboardState(udid: device.resolved)
             return ExecutionResult(

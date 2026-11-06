@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+# Synthetic parser boundary fixture, not an additional device capture.
+   PID   NAME
+   608 kernel worker with spaces
+  3229	com.ohos.sceneboard
+  4494 com.ohos.sceneboard:EngineServiceAbility:1
+ 17290     com.baidu.baiduapp   
+ 24000 com.example.worker name
+ 24001 /system/bin/helper with spaces

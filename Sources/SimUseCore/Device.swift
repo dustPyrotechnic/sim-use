@@ -38,6 +38,7 @@ public struct Device: Codable, Equatable, Hashable, Sendable {
     public enum Platform: String, Codable, Sendable, CaseIterable {
         case ios
         case android
+        case harmony
     }
 
     /// What carries the OS: a Simulator runtime, an Android emulator, or
@@ -60,6 +61,7 @@ public struct Device: Codable, Equatable, Hashable, Sendable {
         public static let androidOnline = "device"
         public static let androidOffline = "offline"
         public static let androidUnauthorized = "unauthorized"
+        public static let harmonyOnline = "device"
     }
 
     public let udid: String
@@ -115,6 +117,7 @@ public struct Device: Codable, Equatable, Hashable, Sendable {
             switch platform {
             case .ios:     kind = .simulator
             case .android: kind = resolved.hasPrefix("emulator-") ? .emulator : .physical
+            case .harmony: kind = .physical
             }
         }
     }
@@ -137,6 +140,7 @@ public struct Device: Codable, Equatable, Hashable, Sendable {
         switch platform {
         case .ios:     return state == State.iosBooted
         case .android: return state == State.androidOnline
+        case .harmony: return state == State.harmonyOnline
         }
     }
 }

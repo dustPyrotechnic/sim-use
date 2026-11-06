@@ -3,6 +3,7 @@ import ArgumentParser
 import Foundation
 import SimUseCore
 import AndroidBackend
+import HarmonyBackend
 import iOSSimBackend
 
 /// `sim-use app-state` — a lightweight, cross-platform read of which apps
@@ -56,7 +57,11 @@ struct AppState: SimUseExecutableCommand {
 
     func execute() async throws -> ExecutionResult {
         let udid = device.resolved
-        switch PlatformRouter.resolve(udid: udid) {
+        switch try PlatformRouter.resolve(udid: udid) {
+        case .harmony:
+            return try HarmonyAppStateCommand.performAppState(
+                serial: udid, bundleId: bundleId, reset: reset
+            )
         case .android:
             return try AndroidAppStateCommand.performAppState(
                 serial: udid, bundleId: bundleId, reset: reset

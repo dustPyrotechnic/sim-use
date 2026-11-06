@@ -60,7 +60,9 @@ public final class DaemonServer {
         // Captured at start from this process's environment (inherited
         // from the client that spawned the daemon) and reported in `_ping`
         // so clients configured for another connection restart it.
-        self.connectionIdentity = connectionIdentity ?? DaemonClient.connectionIdentity(for: udid)
+        self.connectionIdentity = connectionIdentity ?? DaemonClient.connectionIdentity(
+            for: udid, platform: PlatformRouter.platformOverride
+        )
         self.paths = paths ?? DaemonPaths(udid: udid)
         self.idleTimeout = idleTimeout
         // VERSION is generated per-target by VersionPlugin and is
@@ -80,7 +82,7 @@ public final class DaemonServer {
         setenv("SIM_USE_IN_DAEMON", "1", 1)
 
         try paths.ensureBaseDirectory()
-        try paths.writePidfile(getpid())
+        try paths.writePidfile(getpid(), platform: PlatformRouter.platformOverride)
         listenFd = try DaemonSocket.listen(path: paths.socketURL.path)
         installAcceptSource()
         installSignalSources()

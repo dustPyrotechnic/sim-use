@@ -3,6 +3,7 @@ import ArgumentParser
 import Foundation
 import SimUseCore
 import AndroidBackend
+import HarmonyBackend
 import iOSSimBackend
 
 /// Top-level cross-platform `type` verb. Owns the flag surface and
@@ -15,7 +16,19 @@ import iOSSimBackend
 /// replace-mode on Android should use `sim-use android type --clear`
 /// directly.
 struct Type: SimUseExecutableCommand {
-    typealias ExecutionResult = IOSSimTypeCommand.ExecutionResult
+    struct ExecutionResult: Codable, CommandAdvisoryProviding {
+        var commandAdvisory: CommandAdvisory? = nil
+
+        init(commandAdvisory: CommandAdvisory? = nil) {
+            self.commandAdvisory = commandAdvisory
+        }
+
+        init(from decoder: Decoder) throws {}
+        func encode(to encoder: Encoder) throws {
+            _ = encoder.container(keyedBy: CodingKeys.self)
+        }
+        private enum CodingKeys: String, CodingKey { case unused }
+    }
 
     static let configuration = CommandConfiguration(
         abstract: "Type text by entering a sequence of characters.",
@@ -42,6 +55,8 @@ struct Type: SimUseExecutableCommand {
         • This is a limitation of the underlying HID keyboard protocol
 
         Note: iOS may apply smart punctuation spacing to some characters.
+
+        \(HarmonyTargetResolver.safetyHelp)
         """
     )
 
@@ -53,6 +68,19 @@ struct Type: SimUseExecutableCommand {
 
     @Option(name: .customLong("file"), help: "Read text from the specified file.")
     var inputFile: String?
+
+    @Option(name: .customLong("target"), help: "Harmony-only target alias (for example @3); otherwise type into the focused field.")
+    var target: String?
+
+    @OptionGroup var targeting: TapTargetingOptions
+
+    private var hasTarget: Bool {
+        target != nil || targeting.hasExplicitCoordinates || targeting.elementID != nil
+            || targeting.elementLabel != nil || targeting.elementValue != nil
+            || targeting.labelContains != nil || targeting.labelRegex != nil
+            || targeting.elementType != nil || !targeting.frameSpecs.isEmpty
+            || targeting.coordinateSpace != nil
+    }
 
     @OptionGroup var device: DeviceOptions
 
@@ -74,10 +102,21 @@ struct Type: SimUseExecutableCommand {
 
     func validate() throws {
         try IOSSimTypeCommand.validateOptions(text: text, useStdin: useStdin, inputFile: inputFile)
+        if hasTarget { try targeting.validate(alias: target) }
     }
 
     func execute() async throws -> ExecutionResult {
-        switch PlatformRouter.resolve(udid: device.resolved) {
+        let platform = try PlatformRouter.resolve(udid: device.resolved)
+        if hasTarget, platform != .harmony {
+            throw CLIError(errorDescription: "Targeted `type` is Harmony-only; focus the field with `tap` first on iOS and Android.")
+        }
+        switch platform {
+        case .harmony:
+            let result = try HarmonyTypeCommand.performType(
+                udid: device.resolved, text: resolvedInputText(), clear: false,
+                alias: target, targeting: hasTarget ? targeting : nil
+            )
+            return ExecutionResult(commandAdvisory: result.commandAdvisory)
         case .android:
             return try executeAndroid()
         case .iOSDevice:
@@ -93,7 +132,8 @@ struct Type: SimUseExecutableCommand {
 
     private func executeIOSSim() async throws -> ExecutionResult {
         let sub = makeIOSSubcommand()
-        return try await sub.execute()
+        _ = try await sub.execute()
+        return ExecutionResult()
     }
 
     /// Construct the backend command and copy every parsed flag across.
@@ -110,7 +150,7 @@ struct Type: SimUseExecutableCommand {
         return sub
     }
 
-    private func executeAndroid() throws -> ExecutionResult {
+    private func resolvedInputText() throws -> String {
         let inputText: String
         switch (text, useStdin, inputFile) {
         case (let positional?, false, nil):
@@ -124,7 +164,11 @@ struct Type: SimUseExecutableCommand {
         default:
             throw ValidationError("Invalid input configuration.")
         }
-        try AndroidTypeCommand.performType(udid: device.resolved, text: inputText, clear: false)
+        return inputText
+    }
+
+    private func executeAndroid() throws -> ExecutionResult {
+        try AndroidTypeCommand.performType(udid: device.resolved, text: resolvedInputText(), clear: false)
         return ExecutionResult()
     }
 }

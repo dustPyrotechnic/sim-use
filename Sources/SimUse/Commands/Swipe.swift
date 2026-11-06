@@ -3,6 +3,7 @@ import ArgumentParser
 import Foundation
 import SimUseCore
 import AndroidBackend
+import HarmonyBackend
 import iOSSimBackend
 
 /// Top-level cross-platform `swipe` verb. Owns the verb-specific flag
@@ -27,7 +28,7 @@ struct Swipe: SimUseExecutableCommand {
     @Option(name: .customLong("duration"), help: "Duration of the swipe in seconds.")
     var duration: Double?
 
-    @Option(name: .customLong("delta"), help: "Distance between touch points in pixels.")
+    @Option(name: .customLong("delta"), help: "Distance between touch points in pixels (unsupported on HarmonyOS).")
     var delta: Double?
 
     @Option(name: .customLong("pre-delay"), help: "Delay before starting the swipe in seconds.")
@@ -74,7 +75,24 @@ struct Swipe: SimUseExecutableCommand {
     }
 
     func execute() async throws -> ExecutionResult {
-        switch PlatformRouter.resolve(udid: device.resolved) {
+        switch try PlatformRouter.resolve(udid: device.resolved) {
+        case .harmony:
+            guard delta == nil else {
+                throw CLIError(errorDescription: "--delta is not supported on HarmonyOS.")
+            }
+            let coords = try coordinates.resolve()
+            if let preDelay, preDelay > 0 {
+                try await Task.sleep(nanoseconds: UInt64(preDelay * 1_000_000_000))
+            }
+            try HarmonySwipeCommand.performSwipe(
+                udid: device.resolved, startX: coords.roundedStartX, startY: coords.roundedStartY,
+                endX: coords.roundedEndX, endY: coords.roundedEndY,
+                durationMs: max(1, Int((duration ?? 0.3) * 1000))
+            )
+            if let postDelay, postDelay > 0 {
+                try await Task.sleep(nanoseconds: UInt64(postDelay * 1_000_000_000))
+            }
+            return ExecutionResult(coordinates: coords)
         case .android:
             return try await executeAndroid()
         case .iOSDevice:

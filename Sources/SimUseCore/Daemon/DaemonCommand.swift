@@ -44,6 +44,9 @@ public struct Daemon: AsyncParsableCommand {
 
         @OptionGroup var device: DeviceOptions
 
+        @Option(name: .customLong("platform"), help: .hidden)
+        var platform: String?
+
         @Option(
             name: .customLong("idle-timeout"),
             help: "Seconds with no requests before the daemon self-exits. Use 0 to disable (daemon runs forever). Default 600."
@@ -52,6 +55,12 @@ public struct Daemon: AsyncParsableCommand {
 
         mutating func validate() throws {
             try device.resolve()
+            if let platform {
+                guard let resolved = Platform(rawValue: platform) else {
+                    throw ValidationError("Unknown daemon platform '\(platform)'.")
+                }
+                PlatformRouter.platformOverride = resolved
+            }
             guard idleTimeout >= 0 else {
                 throw ValidationError("--idle-timeout must be non-negative.")
             }
@@ -65,6 +74,7 @@ public struct Daemon: AsyncParsableCommand {
             guard let installPlatformHooks = Daemon.installPlatformHooks else {
                 throw CLIError(errorDescription: "This sim-use build did not install its daemon platform hooks.")
             }
+            PlatformRouter.platformOverride = try PlatformRouter.resolve(udid: device.resolved)
             installPlatformHooks(device.resolved)
             let effectiveTimeout: TimeInterval = idleTimeout == 0 ? .infinity : idleTimeout
             let server = DaemonServer(udid: device.resolved, idleTimeout: effectiveTimeout)

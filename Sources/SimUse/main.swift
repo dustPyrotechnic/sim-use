@@ -6,6 +6,7 @@ import FBControlCore
 import Darwin
 import SimUseCore
 import AndroidBackend
+import HarmonyBackend
 import iOSSimBackend
 import iOSDeviceBackend
 
@@ -46,11 +47,23 @@ enum EntryPoint {
         // no-op locally.
         BridgeClient.expectedBridgeVersion = ReleaseVersion.normalize(VERSION)
         Daemon.installPlatformHooks = installDaemonPlatformHooks
+        if Hdc.isAvailable {
+            PlatformRouter.harmonyMembershipProbe = { try Hdc.isKnownTarget($0) }
+        }
+        switch CommandLine.arguments.dropFirst().first {
+        case "harmony": PlatformRouter.platformOverride = .harmony
+        case "android": PlatformRouter.platformOverride = .android
+        case "ios": PlatformRouter.platformOverride = .iOSSim
+        default: break
+        }
         // A per-device daemon only serves clients configured for the same
         // connection (for Android: the adb server and bridge host), so both
         // sides of the daemon protocol need to compute it.
-        DaemonClient.connectionIdentityProvider = { udid in
-            BridgeConnection.daemonConnectionIdentity(udid: udid)
+        DaemonClient.connectionIdentityProvider = { udid, platform in
+            if platform == .harmony {
+                return Hdc.connectionIdentity()
+            }
+            return BridgeConnection.daemonConnectionIdentity(udid: udid)
         }
 
         if let typed = CommandLine.arguments.dropFirst().first,
@@ -94,7 +107,12 @@ enum EntryPoint {
         // can detect a target process disappearing between commands
         // (issue #81). The daemon serves a single device, so the
         // probe is bound to this UDID/serial for its lifetime.
-        if PlatformRouter.looksLikeAndroid(deviceId) {
+        if PlatformRouter.platformOverride == .harmony {
+            DaemonDispatch.platformStaleCleanup = nil
+            // Phase 1 exposes explicit app-state queries, not automatic
+            // crash inference from unrelated system processes.
+            DaemonDispatch.livenessProbe = nil
+        } else if PlatformRouter.platformOverride == .android {
             // `livenessSnapshot` caches the rarely-changing third-party
             // package allowlist, so each command costs one `adb shell`
             // (the fresh `ps`), not two (issue #81 perf follow-up).
@@ -110,10 +128,10 @@ struct SimUse: AsyncParsableCommand {
     static let simUseLogger = SimUseLogger()
 
     static let configuration = CommandConfiguration(
-        abstract: "A utility to interact with iOS Simulators and Android emulators/devices and extract accessibility information.",
+        abstract: "Interact with iOS, Android and HarmonyOS devices and extract accessibility information.",
         version: VERSION,
         subcommands: [
-            // Cross-platform verbs (top-level routes by UDID shape).
+            // Cross-platform verbs route by explicit membership and identifier shape.
             DescribeUI.self,
             Devices.self,
             ListSimulators.self,
@@ -143,6 +161,8 @@ struct SimUse: AsyncParsableCommand {
             IOSSimCommand.self,
             IOSDeviceCommand.self,
             AndroidCommand.self,
+            HarmonyCommand.self,
+            Scroll.self,
         ]
     )
 }

@@ -91,6 +91,16 @@ extension SimUseExecutableCommand {
     public mutating func resolveDeferredArguments() throws {}
 
     public mutating func run() async throws {
+        guard PlatformRouter.harmonyMembershipProbe != nil, PlatformRouter.platformOverride == nil else {
+            try await runInInvocation()
+            return
+        }
+        try await PlatformRouter.$currentInvocation.withValue(PlatformRouter.Invocation(command: resolvedCommandName)) {
+            try await runInInvocation()
+        }
+    }
+
+    private mutating func runInInvocation() async throws {
         let perf = ProcessInfo.processInfo.environment["SIM_USE_CLIENT_PERF"] == "1"
         let tStart = DispatchTime.now()
 
@@ -105,7 +115,7 @@ extension SimUseExecutableCommand {
                     advisory: resolved.advisory
                 )
             } catch {
-                emitJSONError(error)
+                emitJSONError(clientRoutingError(error))
                 Darwin.exit(1)
             }
         } else {
@@ -142,6 +152,7 @@ extension SimUseExecutableCommand {
                 }
                 return
             } catch {
+                let error = clientRoutingError(error)
                 // Text-mode error path. ArgumentParser would otherwise
                 // print `Error: <localizedDescription>` and exit 1, but
                 // it knows nothing about `HintProviding` so the
@@ -156,6 +167,15 @@ extension SimUseExecutableCommand {
                 Darwin.exit(1)
             }
         }
+    }
+
+    private func clientRoutingError(_ error: Error) -> Error {
+        PlatformRouter.errorWithHarmonyHint(
+            error,
+            command: resolvedCommandName,
+            harmonyAvailable: PlatformRouter.harmonyMembershipProbe != nil,
+            platformOverride: PlatformRouter.platformOverride
+        )
     }
 
     /// Route the command through the daemon if it's a candidate and a

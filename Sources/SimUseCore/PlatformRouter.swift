@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
 
-/// The platforms `sim-use` can target: iOS Simulator, Android
-/// (device or emulator), and physical iOS devices (the accessibility
-/// audit channel — a restricted capability set; see
-/// `TargetCapabilityError`).
-public enum Platform: Equatable {
+/// The target backends: iOS Simulator, Android, physical iOS (restricted
+/// accessibility audit capabilities), and HarmonyOS.
+public enum Platform: String, Codable, Equatable, Sendable {
     case iOSSim
     case android
     case iOSDevice
+    case harmony
 }
 
 /// Centralises the UDID-shape heuristics used to decide which backend
@@ -18,12 +17,56 @@ public enum Platform: Equatable {
 /// motivated this module).
 ///
 /// Resolution layers, in priority order:
-///   1. Explicit `--platform` flag — handled by the caller; we accept
-///      a pre-resolved override.
-///   2. Daemon pidfile platform tag — also caller-side (the daemon
-///      knows its own platform).
-///   3. UDID-shape inference (this module).
+///   1. Explicit namespace or the daemon's pinned startup platform.
+///   2. hdc membership for an Android-shaped explicit identifier (macOS hook).
+///   3. Identifier-shape inference, unchanged when no hook is installed.
 public enum PlatformRouter {
+    /// Installed by the macOS executable only. Missing hdc leaves routing unchanged.
+    /// Discovery failure warns once per invocation and preserves Android shape routing.
+    nonisolated(unsafe) public static var harmonyMembershipProbe: ((String) throws -> Bool)?
+
+    /// A daemon pins its platform at startup; namespaces can also override shape.
+    nonisolated(unsafe) public static var platformOverride: Platform?
+
+    /// Default resolution must not probe hdc for an implicitly selected device.
+    nonisolated(unsafe) public static var implicitDevice: String?
+
+    /// Failure suppression belongs to a client invocation, not the membership cache.
+    /// Child tasks share it; a later invocation gets a fresh probe opportunity.
+    @TaskLocal static var currentInvocation: Invocation?
+
+    public final class Invocation: @unchecked Sendable {
+        private let lock = NSLock()
+        private var membershipFailed = false
+        private let command: String
+        private let warning: (String) -> Void
+
+        public init(
+            command: String,
+            warning: @escaping (String) -> Void = {
+                FileHandle.standardError.write(Data(($0 + "\n").utf8))
+            }
+        ) {
+            self.command = command
+            self.warning = warning
+        }
+
+        fileprivate func contains(_ udid: String, probe: (String) throws -> Bool) -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            guard !membershipFailed else { return false }
+            do {
+                return try probe(udid)
+            } catch {
+                membershipFailed = true
+                warning(
+                    "Warning: hdc membership probe failed: \(error.localizedDescription) "
+                        + "Continuing with Android routing; for Harmony use `sim-use harmony \(command)`."
+                )
+                return false
+            }
+        }
+    }
 
     /// Classify a UDID into a target platform. Returns `nil` when the
     /// shape doesn't fit any known platform; callers can choose to fail
@@ -34,13 +77,64 @@ public enum PlatformRouter {
     /// bare ECID resolves as `.android` or `nil`, never `.iOSDevice`.
     /// Documented non-goal (#115); the `ios-device` namespace accepts
     /// ECIDs directly.
-    public static func resolve(udid: String) -> Platform? {
+    public static func resolve(udid: String) throws -> Platform? {
+        try resolve(
+            udid: udid, harmonyMembershipProbe: harmonyMembershipProbe,
+            platformOverride: platformOverride, implicitDevice: implicitDevice,
+            invocation: currentInvocation
+        )
+    }
+
+    /// Injectable classification keeps routing tests independent of host tooling.
+    public static func resolve(
+        udid: String,
+        harmonyMembershipProbe: ((String) throws -> Bool)?,
+        platformOverride: Platform? = nil,
+        implicitDevice: String? = nil,
+        invocation: Invocation? = nil
+    ) throws -> Platform? {
+        if let platformOverride { return platformOverride }
         let trimmed = udid.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return nil }
-        if looksLikeAndroid(trimmed) { return .android }
+        if looksLikeAndroid(trimmed) {
+            if trimmed != implicitDevice, let harmonyMembershipProbe,
+               (invocation ?? Invocation(command: "<verb>")).contains(trimmed, probe: harmonyMembershipProbe) {
+                return .harmony
+            }
+            return .android
+        }
         if looksLikeIOSSim(trimmed) { return .iOSSim }
         if looksLikePhysicalIOSDevice(trimmed) { return .iOSDevice }
         return nil
+    }
+
+    /// Decorate only the final client error. A stale daemon includes its original
+    /// adb diagnostic, so this also works after shutdown without another probe.
+    public static func errorWithHarmonyHint(
+        _ error: Error,
+        command: String,
+        harmonyAvailable: Bool,
+        platformOverride: Platform?
+    ) -> Error {
+        let message = error.localizedDescription
+        guard harmonyAvailable, platformOverride == nil, message.contains("' not found"),
+              message.contains("adb: device '")
+                || message.contains("adb: error: device '")
+                || (message.contains("adb command failed (") && message.contains("): error: device '")) else {
+            return error
+        }
+        let addition = "If this is a Harmony device, it is not currently listed by `hdc list targets`; "
+            + "check the connection or use `sim-use harmony \(command)` explicitly."
+        let originalHint = (error as? HintProviding)?.hint
+        return RoutingError(
+            errorDescription: message,
+            hint: originalHint.map { "\(addition) \($0)" } ?? addition
+        )
+    }
+
+    private struct RoutingError: LocalizedError, HintProviding {
+        let errorDescription: String?
+        let hint: String?
     }
 
     /// `true` when the UDID looks like an iOS Simulator UDID

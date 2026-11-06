@@ -158,6 +158,16 @@ public enum DaemonErrorKind: String, Codable {
         if message.contains("adb: device '") && message.contains("' not found") {
             return true
         }
+        // Harmony: only hdc's unknown-target transport diagnostic means
+        // the daemon's pinned device is gone. Tool and uitest failures
+        // must remain ordinary command errors, even if they say "not found".
+        let transportMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        let prefix = "hdc failed ("
+        let suffix = "): [Fail]Not match target founded, check connect-key please"
+        if transportMessage.hasPrefix(prefix), transportMessage.hasSuffix(suffix),
+           Int32(transportMessage.dropFirst(prefix.count).dropLast(suffix.count)) != nil {
+            return true
+        }
         return false
     }
 }

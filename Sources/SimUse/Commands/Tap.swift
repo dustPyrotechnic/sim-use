@@ -3,6 +3,7 @@ import ArgumentParser
 import Foundation
 import SimUseCore
 import AndroidBackend
+import HarmonyBackend
 import iOSSimBackend
 import iOSDeviceBackend
 
@@ -26,9 +27,9 @@ struct Tap: SimUseExecutableCommand {
         navigation, scroll, modal open / close).
 
         Targeting forms, in rough order of preference:
-          1. Positional alias (`@N`, `#N`, `#N@M`) — fastest, no live
-             AX round-trip. Reads the cached outline from the last
-             `describe-ui`.
+          1. Positional alias (`@N`, `#N`, `#N@M`) — reads the cached
+             point from the last `describe-ui`. Harmony also checks
+             the current layout without refreshing aliases.
           2. `#<id>` positional alias — resolves the literal
              AXUniqueId / Android resource-id short-name against a
              fresh AX tree. Use when the UI may have shifted since
@@ -47,8 +48,10 @@ struct Tap: SimUseExecutableCommand {
         field listing candidate labels so an agent can re-target
         without re-running `describe-ui`.
 
-        Works on both iOS Simulators and connected Android devices;
-        the UDID shape (UUID vs adb serial) decides the backend.
+        Works on iOS Simulators, connected Android devices and HarmonyOS NEXT
+        phones (macOS host). Harmony membership is checked before adb shape routing.
+
+        \(HarmonyTargetResolver.safetyHelp)
 
         Examples:
           sim-use describe-ui                                          # populate the outline cache first
@@ -112,7 +115,22 @@ struct Tap: SimUseExecutableCommand {
     }
 
     func execute() async throws -> ExecutionResult {
-        switch PlatformRouter.resolve(udid: device.resolved) {
+        switch try PlatformRouter.resolve(udid: device.resolved) {
+        case .harmony:
+            guard timing.waitTimeout == 0 else {
+                throw CLIError(errorDescription: "Harmony tap does not support --wait-timeout.")
+            }
+            if let delay = timing.preDelay, delay > 0 {
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+            let result = try HarmonyTapCommand.performTap(
+                serial: device.resolved, alias: alias, targeting: targeting,
+                duration: duration, multiTouch: multiTouch
+            )
+            if let delay = timing.postDelay, delay > 0 {
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+            return ExecutionResult(x: result.x, y: result.y)
         case .android:
             return try executeAndroid()
         case .iOSDevice:

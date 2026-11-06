@@ -254,6 +254,14 @@ let package = Package(
                 .copy("Resources"),
             ]
         ),
+        .target(
+            name: "HarmonyBackend",
+            dependencies: [
+                "SimUseCore",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ],
+            path: "Sources/HarmonyBackend"
+        ),
         .executableTarget(
             name: "SimUse",
             dependencies: [
@@ -261,6 +269,7 @@ let package = Package(
                 "SimUseCore",
                 "SimUseVideo",
                 "AndroidBackend",
+                "HarmonyBackend",
                 "iOSSimBackend",
                 "iOSDeviceBackend",
                 "FBSimulatorControl",
@@ -293,7 +302,7 @@ let package = Package(
         ),
         .testTarget(
             name: "SimUseTests",
-            dependencies: ["SimUse", "iOSSimBackend", "iOSDeviceBackend", "SimUseCore", "SimUseVideo"],
+            dependencies: ["SimUse", "iOSSimBackend", "iOSDeviceBackend", "HarmonyBackend", "SimUseCore", "SimUseVideo"],
             path: "Tests",
             // `Tests/` is the umbrella path; the sub-target test
             // directories below sit under it as separate testTargets.

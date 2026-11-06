@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 @testable import iOSSimBackend
+@testable import SimUse
 import Foundation
 import SimUseCore
 import Testing
@@ -21,6 +22,14 @@ private func encodedJSON<T: Encodable>(_ value: T) throws -> String {
 
 @Suite("CommandAdvisoryProviding — exclude-from-data contract")
 struct CommandAdvisoryContractTests {
+    @Test("top-level type keeps its pasteboard advisory out of data")
+    func harmonyTypeForwarder() throws {
+        let advisory = CommandAdvisory(kind: .pasteboardReplaced, message: "Device pasteboard replaced.")
+        let result = Type.ExecutionResult(commandAdvisory: advisory)
+        #expect(result.commandAdvisory == advisory)
+        #expect(try encodedJSON(result) == "{}")
+    }
+
     @Test("tap result encodes without the advisory and decodes it as nil")
     func tapResult() throws {
         let result = IOSSimTapCommand.ExecutionResult(x: 10, y: 20, commandAdvisory: contractAdvisory)

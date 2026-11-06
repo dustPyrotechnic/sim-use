@@ -81,7 +81,8 @@ public struct DeviceResolver {
         explicit: String?,
         environment: [String: String] = ProcessInfo.processInfo.environment,
         baseDirectory: URL? = nil,
-        bootedListProvider: BootedListProvider = simctlBootedListProvider
+        bootedListProvider: BootedListProvider = simctlBootedListProvider,
+        daemonListProvider: (() throws -> [DaemonPaths.DiscoveredDaemon])? = nil
     ) throws -> String {
         // 1. Explicit --device / --udid wins, after a trim so a stray
         // space doesn't accidentally bypass auto-resolution.
@@ -109,7 +110,8 @@ public struct DeviceResolver {
         // command in an agent session this hits and avoids the simctl fork.
         // A base directory that fails validation throws here: resolution
         // must not be steered by forged pidfiles in a pre-planted tree.
-        let daemons = try DaemonPaths.enumerateLiveDaemons(baseDirectory: baseDirectory)
+        let daemons = try (daemonListProvider?() ?? DaemonPaths.enumerateLiveDaemons(baseDirectory: baseDirectory))
+            .filter { $0.platform != .harmony }
         if daemons.count == 1 {
             return daemons[0].udid
         }
