@@ -2,15 +2,19 @@
 
 # 012.004 — Keyboard occlusion and actionable error hints
 
+> 2026-11-06: The per-round results and the `.build/` evidence paths named below
+> were local and are not in this repository. [001-action.md](001-action.md) now
+> holds the condensed results. Status lines below show the state at that time.
+
 > Correction, 2026-11-05: the `c34d6dc9` device retest found that the
 > `SkinBgContent` rectangle at y=1570 is transparent, not visible keyboard
 > coverage. The original geometry decision and measurements below are kept
 > as history, but are superseded by [005-transparent-keyboard-geometry.md](005-transparent-keyboard-geometry.md).
-> That retest was performed by Claude, not human acceptance.
+> That retest was scripted. It is not human acceptance.
 
 ## Context and approved scope
 
-The Prowl dispatch reports a confirmed keyboard-occlusion bug on a Mate 60 Pro
+The task request reports a confirmed keyboard-occlusion bug on a Mate 60 Pro
 with candidate `d4b4a9da`: a Settings result at center (429,1920) remained in the
 outline, and tapping it pressed the keyboard R key. This supersedes the earlier
 “unconfirmed” status; it is user-supplied device evidence, not a new agent run.
@@ -20,7 +24,7 @@ The user approved three corrections, with failing regression tests before any
 implementation: keyboard occlusion, a selector-miss hint, and Harmony advice
 before the original adb/daemon advice. No device operation, E2E, paid eval,
 commit, push or PR is authorized. Read-only `list targets` reached by unit tests
-is the sole real-hdc exception in the dispatch. Keep the 1.5-second membership
+is the sole real-hdc exception in the task request. Keep the 1.5-second membership
 limit and the existing `type --target` append behavior unchanged.
 
 ## Existing seams and decisions
@@ -117,7 +121,7 @@ seconds including compilation). The six red tests were not weakened.
   smoke observations and cleanup are recorded in [001-action.md](001-action.md).
   Raw evidence is under `.build/harmony-keyboard-review-vrzc2rvs/`.
 
-Status remains **等待人工验收**. No phone was operated; the new candidate has
+Status remains **waiting for manual acceptance**. No phone was operated; the new candidate has
 no manual or live-device acceptance evidence. No commit, push or PR was made.
 The 1.5-second deadline, native type append behavior and the unknown cold-script
 OS mechanism remain unchanged. Keyboard geometry and cached-snapshot limits

@@ -2,6 +2,10 @@
 
 # 012.003 — Android fallback and short-deadline investigation
 
+> 2026-11-06: The per-round results and the `.build/` evidence paths named below
+> were local and are not in this repository. [001-action.md](001-action.md) now
+> holds the condensed results. Status lines below show the state at that time.
+
 > 2026-11-05: [006](006-live-target-safety.md) records a later explicit approval
 > to increase membership discovery from 1.5 to 3 seconds. The measurements,
 > independent runner-test limits and unknown cold-script OS mechanism below
@@ -19,7 +23,7 @@ The user approved three follow-up corrections on candidate `9d21fc26`: preserve 
 
 ## Verification and limits
 
-No phone commands, commits, pushes, PRs, E2E or paid eval. The Prowl dispatch instructions permitted read-only real `hdc list targets` during developer-environment testing; no separate explicit statement of that permission from the user is recorded. Run the full build and at least five consecutive full unit-test runs, with at least three runs leaving `SIM_USE_HDC` unset. Record each result, pre/post pressure failures, and fake-transport CLI/daemon cases in `001-action.md`. Keep the final state at waiting for manual acceptance; disclose an unknown root cause if evidence remains inconclusive.
+No phone commands, commits, pushes, PRs, E2E or paid eval. The task instructions permitted read-only real `hdc list targets` during developer-environment testing; no separate explicit statement of that permission from the user is recorded. Run the full build and at least five consecutive full unit-test runs, with at least three runs leaving `SIM_USE_HDC` unset. Record each result, pre/post pressure failures, and fake-transport CLI/daemon cases in `001-action.md`. Keep the final state at waiting for manual acceptance; disclose an unknown root cause if evidence remains inconclusive.
 
 ## Investigation hypotheses
 

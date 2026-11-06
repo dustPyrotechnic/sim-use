@@ -7,7 +7,7 @@
 | **Primary PRs** | (fill in as they merge) |
 | **Related** | [007-physical-ios-device-backend](../007-physical-ios-device-backend/000-design.md) (capability model, top-level routing), [008-linux-android-build](../008-linux-android-build/000-design.md) (Linux graph, connection-scoped daemon) |
 
-> 2026-11-04: The task dispatch explicitly approves this plan and G1 for
+> 2026-11-04: The task request explicitly approves this plan and G1 for
 > implementation on `feat/harmonyos-backend`. The earlier “unapproved”
 > amendment below is historical. This round stops at manual acceptance;
 > no commit, push, PR, final E2E or paid eval is authorized.
@@ -21,7 +21,7 @@
 > the prior “unconfirmed” status and original-hint-first order are superseded
 > by [004-keyboard-occlusion-and-hints.md](004-keyboard-occlusion-and-hints.md).
 
-> 2026-11-05 transparency correction: the `c34d6dc9` retest by Claude is
+> 2026-11-05 transparency correction: the scripted `c34d6dc9` retest is
 > device evidence, not human acceptance. The y=1570 keyboard boundary in 004
 > was a transparent wrapper. The approved red-first correction is in
 > [005-transparent-keyboard-geometry.md](005-transparent-keyboard-geometry.md).
@@ -337,7 +337,7 @@ tests (no bridge change).
   build, final verification scope, `keyboard-state` gate G1 and default device
   selection. No separate file; the plan is still unapproved.
 - Updated 2026-11-04: gate G1 passed; `keyboard-state` probe uses the `SCBKeyboardPanel` row of the WindowManagerService dump — see [002-g1-keyboard-probe.md](002-g1-keyboard-probe.md)
-- Updated 2026-11-04: implementation authorized by task dispatch. During
+- Updated 2026-11-04: implementation authorized by the task request. During
   execution the user separately approved `brew install xcodegen` and
   `./scripts/build.sh dev` because the checkout had no XCFrameworks.
   This does not authorize device installs or changes to system settings.
@@ -349,3 +349,4 @@ tests (no bridge change).
 - Updated 2026-11-05: user approved red-first keyboard occlusion filtering, selector recovery advice and Harmony-first disconnect hints — see [004-keyboard-occlusion-and-hints.md](004-keyboard-occlusion-and-hints.md).
 - Updated 2026-11-05: correct transparent input-method geometry with conservative subtree fallback and dual-center mutation tests — see [005-transparent-keyboard-geometry.md](005-transparent-keyboard-geometry.md).
 - Updated 2026-11-05: add live alias safety without cache replacement, screen bounds and a 3-second discovery deadline — see [006-live-target-safety.md](006-live-target-safety.md).
+- Updated 2026-11-06: manual acceptance confirmed; the action log was condensed into the repository template — see [001-action.md](001-action.md)

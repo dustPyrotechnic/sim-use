@@ -2,6 +2,10 @@
 
 # 012.005 — Transparent keyboard geometry
 
+> 2026-11-06: The per-round results and the `.build/` evidence paths named below
+> were local and are not in this repository. [001-action.md](001-action.md) now
+> holds the condensed results. Status lines below show the state at that time.
+
 > 2026-11-05: The later approved [006](006-live-target-safety.md) adds live
 > cached-alias checks, actual input-point screen bounds and a 3-second membership
 > limit. Those earlier exclusions below no longer describe the current candidate.
@@ -9,8 +13,8 @@
 
 ## Context and approval
 
-The Prowl dispatch reports a Mate 60 Pro retest of candidate `c34d6dc9` by
-Claude, not human acceptance. Deeply covered Settings results are now blocked,
+The task request reports a scripted Mate 60 Pro retest of candidate
+`c34d6dc9`. It is not human acceptance. Deeply covered Settings results are now blocked,
 keyboard controls work, and results return when the input method disappears.
 But visible results with centers near y=1647 and y=1683 were wrongly hidden.
 The user approved this correction and requires red tests before implementation.
@@ -67,7 +71,7 @@ integer target. Test both axes through the public seams, not private helpers.
 
 ## Limits and status
 
-Status remains **等待人工验收**. A new candidate needs another real-device
+Status remains **waiting for manual acceptance**. A new candidate needs another real-device
 check. Do not change the 1.5-second membership limit or native type append
 behavior. Out-of-screen centers, aliases cached before keyboard appearance and
 aliases from `--include-offscreen` are outside this correction. The prior
@@ -125,6 +129,6 @@ Three full runs, forty pressure rounds and all CLI calls used this coverage-buil
 candidate after the ordinary build's relink. The Hdc and native type source
 hashes match the red gate. No existing assertion was changed.
 
-Status remains **等待人工验收**. The new candidate has no human or live-device
+Status remains **waiting for manual acceptance**. The new candidate has no human or live-device
 acceptance evidence. Real skinned keyboards and spell popups still need device
 checks; only the approved fixture and synthetic cases were exercised here.

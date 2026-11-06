@@ -2,6 +2,10 @@
 
 # 012.006 — Live target safety
 
+> 2026-11-06: The per-round results and the `.build/` evidence paths named below
+> were local and are not in this repository. [001-action.md](001-action.md) now
+> holds the condensed results. Status lines below show the state at that time.
+
 > 2026-11-05 approved review correction: negative element centers need screen
 > recovery advice, zero-size cache entries must not send input, and the
 > in-process fixture must use an isolated cache home. The previous in-process
@@ -15,7 +19,7 @@ aliases covered by the current keyboard, reject resolved targets outside the
 screen, increase membership discovery from 1.5 to 3 seconds, and close the
 six-digit color mutation gap. Red tests must run before implementation.
 No phone operation, E2E, paid eval, commit, push or PR is authorized. Native
-`type --target` append behavior is unchanged. Status: **等待人工验收**.
+`type --target` append behavior is unchanged. Status: **waiting for manual acceptance**.
 
 ## Decisions before code
 
@@ -149,7 +153,7 @@ The old timing failures and both mutation runs remain in `001-action.md`.
   final full runs, 40 stress runs and final smoke used this same binary.
 - The existing six-digit-color implementation was already correct; the new
   case and the killed length-check mutation close the coverage gap.
-- Still **等待人工验收**. No phone, E2E, paid eval, commit, push or PR.
+- Still **waiting for manual acceptance**. No phone, E2E, paid eval, commit, push or PR.
   Real-device effects require a new check. Extra alias dump cost, structural
   keyboard identity and dump-to-input races remain documented limitations.
   Do not claim the prior cold-script OS mechanism or every earlier fixture
@@ -165,7 +169,7 @@ non-executable `*.txt` evidence snapshots; raw result files remain intact.
 
 ## Approved review: negative centers, zero-size aliases and cache home
 
-The dispatch reports negative centers with a connectivity hint and zero-size
+The review reports negative centers with a connectivity hint and zero-size
 diagnostic aliases that send input. Code inspection confirms both paths and the
 fixture's use of `homeDirectoryForCurrentUser`. Independent five-round full
 results and the working 3-second probe are supplied evidence, not new local runs.
@@ -202,7 +206,7 @@ After red, implement the three fixes, then remove each new negative-center and
 zero-size guard independently. Restore and compare hashes. Run `make build`,
 three full `make test` rounds, forty default-parallel filtered rounds and
 offline CLI smoke. Sync and compare both Skill copies. Keep failures and the
-new candidate SHA in `001-action.md`. Status remains **等待人工验收**.
+new candidate SHA in `001-action.md`. Status remains **waiting for manual acceptance**.
 
 ### Review outcome
 
@@ -255,7 +259,7 @@ Both Skill copies compare equal. The final coverage-linked candidate SHA-256 is
 all full, stress and smoke records use this candidate. No real-device or human
 acceptance evidence exists for it. The dump/input race and the historical
 unknown cold-start mechanism remain; no general stale-alias policy is added.
-Status remains **等待人工验收**, with no E2E, paid eval, commit, push or PR.
+Status remains **waiting for manual acceptance**, with no E2E, paid eval, commit, push or PR.
 
 ### Test-only follow-up: selector cache transitions
 
@@ -296,7 +300,7 @@ Coverage rebuilding/relinking after restoration changes the candidate from
 `6d5074c591d3849ef05c2e5858f9217d2adbeb7d6bed9f8af3763ddef897d378`,
 without a production source change. The two requested mutations, not the
 independent reviewer's full 23-mutation set, were rerun. No new device or human
-acceptance evidence exists; status remains **等待人工验收**.
+acceptance evidence exists; status remains **waiting for manual acceptance**.
 
 ## Review Loop P1: Harmony devices JSON envelope
 
@@ -338,4 +342,4 @@ are retained in `001-action.md` and `.build/harmony-devices-envelope-97d6a7fw/`.
 The final coverage-linked candidate SHA-256 is
 `d972bb8206de31f488f66a8cede04737e9b86261872c67118128128d60c0f587`.
 This Review Loop P1 fix has no new device or human acceptance evidence; the
-candidate remains **等待人工验收**, and the full Review Loop is not declared closed.
+candidate remains **waiting for manual acceptance**, and the full Review Loop is not declared closed.
